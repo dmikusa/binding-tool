@@ -1,10 +1,9 @@
 use anyhow::Result;
-use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg};
 use std::io::prelude::*;
 use std::{env, fs, path};
 
 fn main() -> Result<()> {
-    let matches = parse_args();
+    let matches = binding_tools::parse_args();
 
     let binding_type = matches.value_of("TYPE").unwrap(); // required
     let binding_name = matches.value_of("NAME"); // optional
@@ -27,6 +26,7 @@ fn main() -> Result<()> {
 
         fs::create_dir_all(&binding_path)?;
 
+        // TODO: prompt instead of blindly overwriting files
         let mut type_file = fs::File::create(&binding_path.join("type"))?;
         type_file.write_all(binding_type.as_bytes())?;
 
@@ -40,38 +40,4 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn parse_args<'a>() -> clap::ArgMatches<'a> {
-    return App::new(crate_name!())
-        .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!())
-        .after_help(include_str!("additional_help.txt"))
-        .arg(
-            Arg::with_name("TYPE")
-                .short("t")
-                .long("type")
-                .value_name("type")
-                .help("type of binding")
-                .required(true),
-        )
-        .arg(
-            Arg::with_name("PARAM")
-                .short("p")
-                .long("param")
-                .value_name("key=val")
-                .multiple(true)
-                .required(true)
-                .help("key/value to set for the type"),
-        )
-        .arg(
-            Arg::with_name("NAME")
-                .short("n")
-                .long("name")
-                .value_name("name")
-                .required(false)
-                .help("optional name for the binding, name defaults to the type"),
-        )
-        .get_matches();
 }
