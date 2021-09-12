@@ -1,0 +1,13 @@
+[package]
+name = "bindings-tool"
+version = "0.1.0"
+edition = "2018"
+authors = ["Daniel Mikusa <dmikusa@vmware.com>"]
+description = "Generates bindings for use with Cloud Native Buildpacks"
+
+[dependencies]
+anyhow = "1.0"
+
+[dependencies.clap]
+version = "2.33"
+default-features = false

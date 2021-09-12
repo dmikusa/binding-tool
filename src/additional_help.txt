@@ -1,0 +1,15 @@
+Param should be in the format key=value, where key is the
+name of the binding and value is the contents of the
+binding. If you wish to pull the contents of a binding
+from a file, you may do so by inserting an `@` symbol at
+the beginning of the contents and specifying a path. Full
+paths or relative paths from the current working directory
+are accepted.
+
+Ex:  `-p my_cert=@path/to/my_cert.pem`
+
+By default bindings will be generated under `./bindings`,
+however you may set `SERVICE_BINDING_ROOT` to change this
+location.
+
+All types and param key names must be valid file names.
