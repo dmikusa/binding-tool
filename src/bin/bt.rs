@@ -1,13 +1,15 @@
 use anyhow::Result;
-use std::io::prelude::*;
-use std::{env, fs, path};
+use std::env;
 
 fn main() -> Result<()> {
-    let matches = binding_tools::parse_args();
+    let matches = binding_tools::parse_args(env::args());
 
-    let binding_type = matches.value_of("TYPE").unwrap(); // required
-    let binding_name = matches.value_of("NAME"); // optional
-    let binding_key_vals = matches.values_of("PARAM").unwrap(); // required
+    // required (it's OK to unwrap)
+    let binding_type = matches.value_of("TYPE").unwrap();
+    let binding_key_vals = matches.values_of("PARAM").unwrap();
+
+    // optional (it's not OK to unwrap)
+    let binding_name = matches.value_of("NAME");
 
     // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
     let bindings_home = match env::var("SERVICE_BINDING_ROOT") {
@@ -20,24 +22,7 @@ fn main() -> Result<()> {
             .into(),
     };
 
-    for bkv in binding_key_vals {
-        let binding_path =
-            path::Path::new(&bindings_home).join(binding_name.unwrap_or(binding_type));
-
-        fs::create_dir_all(&binding_path)?;
-
-        // TODO: prompt instead of blindly overwriting files
-        let mut type_file = fs::File::create(&binding_path.join("type"))?;
-        type_file.write_all(binding_type.as_bytes())?;
-
-        if let Some((binding_key, binding_value)) = bkv.split_once("=") {
-            let mut binding_file = fs::File::create(&binding_path.join(binding_key))?;
-            binding_file.write_all(binding_value.as_bytes())?;
-            // TODO: handle `@` and copy file contents
-        } else {
-            println!("could not parse key/value -> {}\n{}", bkv, matches.usage());
-        }
-    }
-
-    Ok(())
+    // process bindings
+    let btp = binding_tools::BindingProcessor::new(&bindings_home, binding_type, binding_name);
+    btp.process_bindings(binding_key_vals)
 }
