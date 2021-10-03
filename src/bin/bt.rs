@@ -23,6 +23,11 @@ fn main() -> Result<()> {
     };
 
     // process bindings
-    let btp = binding_tools::BindingProcessor::new(&bindings_home, binding_type, binding_name);
+    let btp = binding_tools::BindingProcessor::new(
+        &bindings_home,
+        binding_type,
+        binding_name,
+        binding_tools::ConsoleBindingConfirmer {},
+    );
     btp.process_bindings(binding_key_vals)
 }
