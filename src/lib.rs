@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::io::{prelude::*, stdin};
 use std::{env, fs, path};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg, Values};
 
 /// Parse application arguments
@@ -154,7 +154,8 @@ where
         let binding_path = path::Path::new(self.bindings_home)
             .join(self.binding_name.unwrap_or(self.binding_type));
 
-        fs::create_dir_all(&binding_path)?;
+        fs::create_dir_all(&binding_path)
+            .with_context(|| format!("{}", binding_path.to_string_lossy()))?;
 
         if let Some((binding_key, binding_value)) = binding_key_val.as_ref().split_once("=") {
             let binding_key_path = binding_path.join(binding_key);
@@ -163,14 +164,39 @@ where
                 anyhow::ensure!(self.confirmer.confirm(), "binding already exists");
             }
 
-            let mut type_file = fs::File::create(&binding_path.join("type"))?;
-            type_file.write_all(self.binding_type.as_bytes())?;
+            let mut type_file = fs::File::create(&binding_path.join("type"))
+                .with_context(|| "cannot open type file")?;
+            type_file
+                .write_all(self.binding_type.as_bytes())
+                .with_context(|| "cannot write the type file")?;
 
             if binding_value.starts_with("@") {
-                fs::copy(binding_value.trim_start_matches("@"), binding_key_path)?;
+                let src = binding_value.trim_start_matches("@");
+                let src_path = path::Path::new(src)
+                    .canonicalize()
+                    .with_context(|| format!("cannot canonicalize path to source file: {}", src))?;
+                fs::copy(&src_path, &binding_key_path).with_context(|| {
+                    format!(
+                        "failed to copy {} to {}",
+                        src_path.to_string_lossy(),
+                        binding_key_path.to_string_lossy()
+                    )
+                })?;
             } else {
-                let mut binding_file = fs::File::create(binding_key_path)?;
-                binding_file.write_all(binding_value.as_bytes())?;
+                let mut binding_file = fs::File::create(&binding_key_path).with_context(|| {
+                    format!(
+                        "cannot open binding key path: {}",
+                        &binding_key_path.to_string_lossy()
+                    )
+                })?;
+                binding_file
+                    .write_all(binding_value.as_bytes())
+                    .with_context(|| {
+                        format!(
+                            "cannot write to binding key path: {}",
+                            binding_key_path.to_string_lossy()
+                        )
+                    })?;
             }
 
             Ok(())
