@@ -23,11 +23,23 @@ fn main() -> Result<()> {
     };
 
     // process bindings
-    let btp = binding_tools::BindingProcessor::new(
-        &bindings_home,
-        binding_type,
-        binding_name,
-        binding_tools::ConsoleBindingConfirmer {},
-    );
-    btp.process_bindings(binding_key_vals)
+    return if matches.is_present("FORCE") {
+        let btp = binding_tools::BindingProcessor::new(
+            &bindings_home,
+            binding_type,
+            binding_name,
+            binding_tools::TrueBindingConfirmer {},
+        );
+
+        btp.process_bindings(binding_key_vals)
+    } else {
+        let btp = binding_tools::BindingProcessor::new(
+            &bindings_home,
+            binding_type,
+            binding_name,
+            binding_tools::ConsoleBindingConfirmer {},
+        );
+
+        btp.process_bindings(binding_key_vals)
+    };
 }

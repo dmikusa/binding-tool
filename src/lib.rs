@@ -25,7 +25,7 @@ use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg
 /// More Advanced: Multiple parameters and a name
 ///
 /// ```
-/// let args = binding_tools::parse_args(vec!["bt", "-t", "binding", "-n", "better_name", "-p", "foo=bar", "-p", "gorilla=banana"]);
+/// let args = binding_tools::parse_args(vec!["bt", "-f", "-t", "binding", "-n", "better_name", "-p", "foo=bar", "-p", "gorilla=banana"]);
 ///
 /// assert_eq!(args.value_of("TYPE").unwrap(), "binding");
 ///
@@ -33,6 +33,8 @@ use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg
 /// assert_eq!(params, vec!["foo=bar", "gorilla=banana"]);
 ///
 /// assert_eq!(args.value_of("NAME").unwrap(), "better_name");
+///
+/// assert_eq!(args.is_present("FORCE"), true);
 /// ```
 ///
 pub fn parse_args<'a, I, T>(args: I) -> clap::ArgMatches<'a>
@@ -45,6 +47,14 @@ where
         .author(crate_authors!())
         .about(crate_description!())
         .after_help(include_str!("help/additional_help.txt"))
+        .arg(
+            Arg::with_name("FORCE")
+                .short("f")
+                .long("force")
+                .value_name("force")
+                .takes_value(false)
+                .help("force update if key exists"),
+        )
         .arg(
             Arg::with_name("TYPE")
                 .short("t")
