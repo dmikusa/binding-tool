@@ -192,8 +192,8 @@ jobs:
           args: '--release'
       - uses: actions/upload-artifact@master
         with:
-          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}
-          path: ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}
+          name: bt-${{ matrix.target }}
+          path: ./target/release/bt${{ matrix.suffix }}
   release:
     if: github.ref == 'refs/heads/main'
     needs:
@@ -214,13 +214,13 @@ jobs:
         shell: bash
       - uses: actions/download-artifact@master
         with:
-          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-unknown-linux-gnu
+          name: bt-x86_64-unknown-linux-gnu
       - uses: actions/download-artifact@master
         with:
-          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin
+          name: bt-x86_64-apple-darwin
       - uses: actions/download-artifact@master
         with:
-          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc
+          name: bt-x86_64-pc-windows-msvc
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
