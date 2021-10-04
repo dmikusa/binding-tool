@@ -44,16 +44,22 @@ All types and param key names must be valid file names.
 
 1. Create a `ca-certificates` binding: `bt -t 'ca-certificates' -p "VMware Root.pem=@$HOME/VMware Root.pem"`
 2. Add another certificate to the binding: `bt -t 'ca-certificates' -p "VMware Support Labs Root.pem=@$HOME/VMware Support Labs.pem"`
+3. Add a dependency mapping: `bt -t 'dependency-mapping' -p '23628d2945e54fc9c013a538d8902cfd371ff12ac57df390869e492002999418=file:///deps/bellsoft-jdk8u302+8-linux-amd64.tar.gz'`
+4. Add another dependency mapping: `bt -t 'dependency-mapping' -p '43400304ef7ca9934b9c208df3c07f958b17ad5a9bbf5d59c73809a6cb2cadee=file:///deps/bellsoft-jre8u302+8-linux-amd64.tar.gz'`
 
 This results in:
 
 ```
 > tree bindings/
 bindings/
-└── ca-certificates
-    ├── VMware\ Root.pem
-    ├── VMware\ Support\ Labs\ Root.pem
+├── ca-certificates
+│   ├── VMware\ Root.pem
+│   ├── VMware\ Support\ Labs\ Root.pem
+│   └── type
+└── dependency-mapping
+    ├── 23628d2945e54fc9c013a538d8902cfd371ff12ac57df390869e492002999418
+    ├── 43400304ef7ca9934b9c208df3c07f958b17ad5a9bbf5d59c73809a6cb2cadee
     └── type
 
-1 directory, 3 files
+2 directories, 6 files
 ```
