@@ -3,7 +3,7 @@ name = "binding_tools"
 version = "0.1.0"
 edition = "2018"
 authors = ["Daniel Mikusa <dmikusa@vmware.com>"]
-description = "Generates bindings for use with Cloud Native Buildpacks"
+description = "Generate Kubernetes service bindings for use with Cloud Native Buildpacks"
 
 [dependencies]
 anyhow = "1.0"
