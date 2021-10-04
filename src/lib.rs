@@ -96,7 +96,7 @@ impl BindingConfirmer for ConsoleBindingConfirmer {
         let mut input: String = String::new();
         let res = stdin().lock().read_line(&mut input);
         let input = input.trim().to_lowercase();
-        return res.is_ok() && (input == "y" || input == "yes");
+        res.is_ok() && (input == "y" || input == "yes")
     }
 }
 
@@ -170,8 +170,8 @@ where
                 .write_all(self.binding_type.as_bytes())
                 .with_context(|| "cannot write the type file")?;
 
-            if binding_value.starts_with("@") {
-                let src = binding_value.trim_start_matches("@");
+            if binding_value.starts_with('@') {
+                let src = binding_value.trim_start_matches('@');
                 let src_path = path::Path::new(src)
                     .canonicalize()
                     .with_context(|| format!("cannot canonicalize path to source file: {}", src))?;
