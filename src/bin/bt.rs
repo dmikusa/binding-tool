@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::env;
 
 fn main() -> Result<()> {
-    let matches = binding_tools::parse_args(env::args());
+    let matches = binding_tool::parse_args(env::args());
 
     // required (it's OK to unwrap)
     let binding_type = matches.value_of("TYPE").unwrap();
@@ -24,20 +24,20 @@ fn main() -> Result<()> {
 
     // process bindings
     return if matches.is_present("FORCE") {
-        let btp = binding_tools::BindingProcessor::new(
+        let btp = binding_tool::BindingProcessor::new(
             &bindings_home,
             binding_type,
             binding_name,
-            binding_tools::TrueBindingConfirmer {},
+            binding_tool::TrueBindingConfirmer {},
         );
 
         btp.process_bindings(binding_key_vals)
     } else {
-        let btp = binding_tools::BindingProcessor::new(
+        let btp = binding_tool::BindingProcessor::new(
             &bindings_home,
             binding_type,
             binding_name,
-            binding_tools::ConsoleBindingConfirmer {},
+            binding_tool::ConsoleBindingConfirmer {},
         );
 
         btp.process_bindings(binding_key_vals)

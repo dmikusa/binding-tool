@@ -1,5 +1,5 @@
 [package]
-name = "binding_tools"
+name = "binding_tool"
 version = "0.1.0"
 edition = "2018"
 authors = ["Daniel Mikusa <dmikusa@vmware.com>"]

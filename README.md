@@ -6,7 +6,7 @@ A tool for generating [Kubernetes service bindings](https://github.com/servicebi
 
 ```
 > bt --help
-binding_tools 0.1.0
+binding_tool 0.1.0
 Daniel Mikusa <dmikusa@vmware.com>
 Generates bindings for use with Cloud Native Buildpacks
 

@@ -12,7 +12,7 @@ use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg
 /// Basic: Single parameter without a name
 ///
 /// ```
-/// let args = binding_tools::parse_args(vec!["bt", "-t", "binding", "-p", "foo=bar"]);
+/// let args = binding_tool::parse_args(vec!["bt", "-t", "binding", "-p", "foo=bar"]);
 ///
 /// assert_eq!(args.value_of("TYPE").unwrap(), "binding");
 ///
@@ -25,7 +25,7 @@ use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg
 /// More Advanced: Multiple parameters and a name
 ///
 /// ```
-/// let args = binding_tools::parse_args(vec!["bt", "-f", "-t", "binding", "-n", "better_name", "-p", "foo=bar", "-p", "gorilla=banana"]);
+/// let args = binding_tool::parse_args(vec!["bt", "-f", "-t", "binding", "-n", "better_name", "-p", "foo=bar", "-p", "gorilla=banana"]);
 ///
 /// assert_eq!(args.value_of("TYPE").unwrap(), "binding");
 ///
