@@ -301,17 +301,14 @@ impl BindingConfirmer for TrueBindingConfirmer {
     }
 }
 
-pub struct BindingProcessor<'a, T>
-where
-    T: BindingConfirmer,
-{
+pub struct BindingProcessor<'a, T> {
     bindings_home: &'a str,
     binding_type: &'a str,
     binding_name: Option<&'a str>,
     confirmer: T,
 }
 
-impl<'a, T: BindingConfirmer> BindingProcessor<'a, T>
+impl<'a, T> BindingProcessor<'a, T>
 where
     T: BindingConfirmer,
 {
@@ -347,58 +344,93 @@ where
         let binding_path = path::Path::new(self.bindings_home)
             .join(self.binding_name.unwrap_or(self.binding_type));
 
-        fs::create_dir_all(&binding_path)
-            .with_context(|| format!("{}", binding_path.to_string_lossy()))?;
-
         if let Some((binding_key, binding_value)) = binding_key_val.as_ref().split_once("=") {
-            let binding_key_path = binding_path.join(binding_key);
+            let writer = BindingWriter::new(binding_path, binding_key, binding_value);
 
-            if binding_key_path.exists() {
+            if writer.binding_key_path().exists() {
                 anyhow::ensure!(self.confirmer.confirm(), "binding already exists");
             }
 
-            let mut type_file = fs::File::create(&binding_path.join("type"))
-                .with_context(|| "cannot open type file")?;
-            type_file
-                .write_all(self.binding_type.as_bytes())
-                .with_context(|| "cannot write the type file")?;
-
-            if binding_value.starts_with('@') {
-                let src = binding_value.trim_start_matches('@');
-                let src_path = path::Path::new(src)
-                    .canonicalize()
-                    .with_context(|| format!("cannot canonicalize path to source file: {}", src))?;
-                fs::copy(&src_path, &binding_key_path).with_context(|| {
-                    format!(
-                        "failed to copy {} to {}",
-                        src_path.to_string_lossy(),
-                        binding_key_path.to_string_lossy()
-                    )
-                })?;
-            } else {
-                let mut binding_file = fs::File::create(&binding_key_path).with_context(|| {
-                    format!(
-                        "cannot open binding key path: {}",
-                        &binding_key_path.to_string_lossy()
-                    )
-                })?;
-                binding_file
-                    .write_all(binding_value.as_bytes())
-                    .with_context(|| {
-                        format!(
-                            "cannot write to binding key path: {}",
-                            binding_key_path.to_string_lossy()
-                        )
-                    })?;
-            }
-
-            Ok(())
+            writer.write(self.binding_type)
         } else {
             Err(anyhow!(
                 "could not parse key/value -> {}",
                 binding_key_val.as_ref()
             ))
         }
+    }
+}
+
+struct BindingWriter<'a, P> {
+    path: P,
+    key: &'a str,
+    value: &'a str,
+}
+
+impl<'a, P> BindingWriter<'a, P>
+where
+    P: AsRef<path::Path>,
+{
+    fn new(path: P, key: &'a str, value: &'a str) -> BindingWriter<'a, P> {
+        BindingWriter { path, key, value }
+    }
+
+    fn binding_key_path(&self) -> path::PathBuf {
+        self.path.as_ref().join(self.key)
+    }
+
+    fn write(&self, binding_type: &'a str) -> Result<()> {
+        fs::create_dir_all(self.path.as_ref())
+            .with_context(|| format!("{}", self.path.as_ref().to_string_lossy()))?;
+
+        self.write_type(binding_type)?;
+
+        if self.value.starts_with('@') {
+            self.write_key_as_file()?;
+        } else {
+            self.write_key_as_value()?;
+        }
+
+        Ok(())
+    }
+
+    fn write_type(&self, binding_type: &'a str) -> Result<()> {
+        let mut type_file = fs::File::create(self.path.as_ref().join("type"))
+            .with_context(|| "cannot open type file")?;
+        type_file
+            .write_all(binding_type.as_bytes())
+            .with_context(|| "cannot write the type file")
+    }
+
+    fn write_key_as_file(&self) -> Result<u64> {
+        let src = self.value.trim_start_matches('@');
+        let src_path = path::Path::new(src)
+            .canonicalize()
+            .with_context(|| format!("cannot canonicalize path to source file: {}", src))?;
+        fs::copy(&src_path, self.binding_key_path()).with_context(|| {
+            format!(
+                "failed to copy {} to {}",
+                src_path.to_string_lossy(),
+                self.binding_key_path().to_string_lossy()
+            )
+        })
+    }
+
+    fn write_key_as_value(&self) -> Result<()> {
+        let mut binding_file = fs::File::create(self.binding_key_path()).with_context(|| {
+            format!(
+                "cannot open binding key path: {}",
+                self.binding_key_path().to_string_lossy()
+            )
+        })?;
+        binding_file
+            .write_all(self.value.as_bytes())
+            .with_context(|| {
+                format!(
+                    "cannot write to binding key path: {}",
+                    self.binding_key_path().to_string_lossy()
+                )
+            })
     }
 }
 
