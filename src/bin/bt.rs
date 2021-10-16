@@ -1,10 +1,11 @@
 use anyhow::Result;
-use binding_tool::{Command, CommandHandler, HelpCommandHandler};
+use binding_tool::{Command, CommandHandler, Parser};
 use std::env;
 use std::str::FromStr;
 
 fn main() -> Result<()> {
-    let matches = binding_tool::parse_args(env::args());
+    let matcher = Parser::new();
+    let matches = matcher.parse_args(env::args());
     let executed_command = matches.subcommand_name().unwrap_or("help");
     let args = matches.subcommand_matches(executed_command);
 
@@ -14,6 +15,6 @@ fn main() -> Result<()> {
         Ok(Command::CaCerts(handler)) => handler.handle(args),
         Ok(Command::DependencyMapping(handler)) => handler.handle(args),
         Ok(Command::Args(handler)) => handler.handle(args),
-        _ => HelpCommandHandler {}.handle(args),
+        Err(err) => Err(err),
     }
 }

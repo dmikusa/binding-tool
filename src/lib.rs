@@ -2,279 +2,292 @@ use std::ffi::OsString;
 use std::io::{prelude::*, stdin};
 use std::{env, fs, path, str};
 
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use clap::{
     crate_authors, crate_description, crate_name, crate_version, App, Arg, ArgMatches, SubCommand,
     Values,
 };
 
-/// Parse application arguments
-///
-/// ### Examples
-///
-/// Basic: Add a single parameter without a name
-///
-/// ```
-/// let args = binding_tool::parse_args(vec!["bt", "add", "-t", "binding", "-p", "foo=bar"]);
-/// let cmd = args.subcommand_matches("add").unwrap();
-///
-/// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
-///
-/// let params:Vec<_> = cmd.values_of("PARAM").unwrap().collect();
-/// assert_eq!(params, vec!["foo=bar"]);
-/// assert_eq!(cmd.value_of("NAME"), None);
-/// ```
-///
-/// More Advanced: Add with multiple parameters and a name
-///
-/// ```
-/// let args = binding_tool::parse_args(vec!["bt", "-f", "add", "-n", "better_name", "-t", "binding", "-p", "foo=bar", "-p", "gorilla=banana"]);
-/// let cmd = args.subcommand_matches("add").unwrap();
-///
-/// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
-///
-/// let params:Vec<_> = cmd.values_of("PARAM").unwrap().collect();
-/// assert_eq!(params, vec!["foo=bar", "gorilla=banana"]);
-/// assert_eq!(cmd.value_of("NAME").unwrap(), "better_name");
-/// assert_eq!(args.is_present("FORCE"), true);
-/// ```
-///
-/// Basic: Delete an entire binding
-///
-/// ```
-/// let args = binding_tool::parse_args(vec!["bt", "delete", "-t", "binding"]);
-/// let cmd = args.subcommand_matches("delete").unwrap();
-///
-/// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
-/// assert!(cmd.values_of("PARAM").is_none());
-/// assert_eq!(cmd.value_of("NAME"), None);
-/// ```
-///
-/// More Advanced: Delete parts of a binding
-///
-/// ```
-/// let args = binding_tool::parse_args(vec!["bt", "-f", "delete", "-n", "better_name", "-t", "binding", "-p", "foo=bar"]);
-/// let cmd = args.subcommand_matches("delete").unwrap();
-///
-/// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
-///
-/// let params:Vec<_> = cmd.values_of("PARAM").unwrap().collect();
-/// assert_eq!(params, vec!["foo=bar"]);
-/// assert_eq!(cmd.value_of("NAME").unwrap(), "better_name");
-/// assert_eq!(args.is_present("FORCE"), true);
-/// ```
-///
-/// Convenience: add ca-certificates
-///
-/// ```
-/// let args = binding_tool::parse_args(vec!["bt", "-f", "ca-certs", "-n", "my-certs", "-c", "/path/to/ca.crt"]);
-/// let cmd = args.subcommand_matches("ca-certs").unwrap();
-///
-///
-/// let certs:Vec<_> = cmd.values_of("CERT").unwrap().collect();
-/// assert_eq!(certs, vec!["/path/to/ca.crt"]);
-/// assert_eq!(cmd.value_of("NAME").unwrap(), "my-certs");
-/// assert_eq!(args.is_present("FORCE"), true);
-/// ```
-///
-/// Convenience: add dependency-mappings
-///
-/// ```
-/// let args = binding_tool::parse_args(vec!["bt", "dependency-mapping", "-n", "my-deps", "-f", "/path/to/file.zip"]);
-/// let cmd = args.subcommand_matches("dependency-mapping").unwrap();
-///
-/// let files:Vec<_> = cmd.values_of("FILE").unwrap().collect();
-/// assert_eq!(files, vec!["/path/to/file.zip"]);
-/// assert_eq!(cmd.value_of("NAME").unwrap(), "my-deps");
-/// assert_eq!(cmd.is_present("FORCE"), false);
-/// ```
-///
-/// Convenience: add dependency-mappings from buildpack
-///
-/// ```
-/// let args = binding_tool::parse_args(vec!["bt", "dependency-mapping", "-b", "buildpack/id-1:v1.0.1", "-b", "buildpack/id-2:v2.1.0"]);
-/// let cmd = args.subcommand_matches("dependency-mapping").unwrap();
-///
-/// let bps:Vec<_> = cmd.values_of("BUILDPACK").unwrap().collect();
-/// assert_eq!(bps, vec!["buildpack/id-1:v1.0.1", "buildpack/id-2:v2.1.0"]);
-/// assert_eq!(cmd.is_present("FORCE"), false);
-/// ```
-///
-/// Convenience: add arguments for docker run
-///
-/// ```
-/// let args = binding_tool::parse_args(vec!["bt", "args", "-d"]);
-/// let cmd = args.subcommand_matches("args").unwrap();
-///
-/// assert_eq!(cmd.is_present("DOCKER"), true);
-/// assert_eq!(cmd.is_present("PACK"), false);
-/// ```
-///
-/// Convenience: add arguments for pack build
-///
-/// ```
-/// let args = binding_tool::parse_args(vec!["bt", "args", "-p"]);
-/// let cmd = args.subcommand_matches("args").unwrap();
-///
-/// assert_eq!(cmd.is_present("DOCKER"), false);
-/// assert_eq!(cmd.is_present("PACK"), true);
-/// ```
-///
-pub fn parse_args<'a, I, T>(args: I) -> clap::ArgMatches<'a>
-where
-    I: IntoIterator<Item = T>,
-    T: Into<OsString> + Clone,
-{
-    return App::new(crate_name!())
-        .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!())
-        .arg(
-            Arg::with_name("FORCE")
-                .short("f")
-                .long("force")
-                .takes_value(false)
-                .help("force update if key exists"),
-        )
-        .subcommand(
-            SubCommand::with_name("add")
-                .alias("a")
-                .arg(
-                    Arg::with_name("NAME")
-                        .short("n")
-                        .long("name")
-                        .value_name("name")
-                        .required(false)
-                        .help("optional name for the binding,\nname defaults to the type"),
-                )
-                .arg(
-                    Arg::with_name("TYPE")
-                        .short("t")
-                        .long("type")
-                        .value_name("type")
-                        .help("type of binding")
-                        .required(true),
-                )
-                .arg(
-                    Arg::with_name("PARAM")
-                        .short("p")
-                        .long("param")
-                        .value_name("key=val")
-                        .multiple(true)
-                        .required(true)
-                        .help("key/value to set for the type"),
-                )
-                .about("Add or modify a binding")
-                .after_help(include_str!("help/additional_help.txt")),
-        )
-        .subcommand(
-            SubCommand::with_name("delete")
-                .alias("d")
-                .arg(
-                    Arg::with_name("NAME")
-                        .short("n")
-                        .long("name")
-                        .value_name("name")
-                        .required(false)
-                        .help("optional name for the binding,\nname defaults to the type"),
-                )
-                .arg(
-                    Arg::with_name("TYPE")
-                        .short("t")
-                        .long("type")
-                        .value_name("type")
-                        .help("type of binding")
-                        .required(true),
-                )
-                .arg(
-                    Arg::with_name("PARAM")
-                        .short("p")
-                        .long("param")
-                        .value_name("key=val")
-                        .multiple(true)
-                        .required(false)
-                        .help("key/value to set for the type"),
-                )
-                .about("Delete a binding")
-                .after_help(include_str!("help/additional_help.txt")),
-        )
-        .subcommand(
-            SubCommand::with_name("ca-certs")
-                .alias("cc")
-                .arg(
-                    Arg::with_name("NAME")
-                        .short("n")
-                        .long("name")
-                        .value_name("name")
-                        .required(false)
-                        .help("optional name for the binding,\nname defaults to the type"),
-                )
-                .arg(
-                    Arg::with_name("CERT")
-                        .short("c")
-                        .long("cert")
-                        .value_name("cert")
-                        .required(true)
-                        .multiple(true)
-                        .help("path to a CA certificate to add"),
-                )
-                .about("Convenience for adding `ca-certificates` bindings")
-                .after_help(include_str!("help/additional_help.txt")),
-        )
-        .subcommand(
-            SubCommand::with_name("dependency-mapping")
-                .alias("dm")
-                .arg(
-                    Arg::with_name("NAME")
-                        .short("n")
-                        .long("name")
-                        .value_name("name")
-                        .required(false)
-                        .help("optional name for the binding,\nname defaults to the type"),
-                )
-                .arg(
-                    Arg::with_name("FILE")
-                        .short("f")
-                        .long("file")
-                        .value_name("file")
-                        .multiple(true)
-                        .conflicts_with("BUILDPACK")
-                        .help("path to local dependency file"),
-                )
-                .arg(
-                    Arg::with_name("BUILDPACK")
-                        .short("b")
-                        .long("buildpack")
-                        .value_name("buildpack")
-                        .multiple(true)
-                        .conflicts_with("FILE")
-                        .help("buildpack ID from which dependencies will be loaded"),
-                )
-                .about("Convenience for adding `dependency-mapping` bindings")
-                .after_help(include_str!("help/additional_help.txt")),
-        )
-        .subcommand(
-            SubCommand::with_name("args")
-                .arg(
-                    Arg::with_name("DOCKER")
-                        .short("d")
-                        .long("docker")
-                        .takes_value(false)
-                        .conflicts_with("PACK")
-                        .help("generates binding args for `docker run`"),
-                )
-                .arg(
-                    Arg::with_name("PACK")
-                        .short("p")
-                        .long("pack")
-                        .takes_value(false)
-                        .conflicts_with("DOCKER")
-                        .help("generates binding args for `pack build`"),
-                )
-                .about("Convenience that generates binding args for `pack build` and `docker run`")
-                .after_help(include_str!("help/additional_help.txt")),
-        )
-        .get_matches_from(args);
+pub struct Parser<'a, 'b> {
+    app: clap::App<'a, 'b>,
+}
+
+impl<'a, 'b> Parser<'a, 'b> {
+    /// Parse application arguments
+    ///
+    /// ### Examples
+    ///
+    /// Basic: Add a single parameter without a name
+    ///
+    /// ```
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "add", "-t", "binding", "-p", "foo=bar"]);
+    /// let cmd = args.subcommand_matches("add").unwrap();
+    ///
+    /// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
+    ///
+    /// let params:Vec<_> = cmd.values_of("PARAM").unwrap().collect();
+    /// assert_eq!(params, vec!["foo=bar"]);
+    /// assert_eq!(cmd.value_of("NAME"), None);
+    /// ```
+    ///
+    /// More Advanced: Add with multiple parameters and a name
+    ///
+    /// ```
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "-f", "add", "-n", "better_name", "-t", "binding", "-p", "foo=bar", "-p", "gorilla=banana"]);
+    /// let cmd = args.subcommand_matches("add").unwrap();
+    ///
+    /// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
+    ///
+    /// let params:Vec<_> = cmd.values_of("PARAM").unwrap().collect();
+    /// assert_eq!(params, vec!["foo=bar", "gorilla=banana"]);
+    /// assert_eq!(cmd.value_of("NAME").unwrap(), "better_name");
+    /// assert_eq!(args.is_present("FORCE"), true);
+    /// ```
+    ///
+    /// Basic: Delete an entire binding
+    ///
+    /// ```
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "delete", "-t", "binding"]);
+    /// let cmd = args.subcommand_matches("delete").unwrap();
+    ///
+    /// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
+    /// assert!(cmd.values_of("PARAM").is_none());
+    /// assert_eq!(cmd.value_of("NAME"), None);
+    /// ```
+    ///
+    /// More Advanced: Delete parts of a binding
+    ///
+    /// ```
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "-f", "delete", "-n", "better_name", "-t", "binding", "-p", "foo=bar"]);
+    /// let cmd = args.subcommand_matches("delete").unwrap();
+    ///
+    /// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
+    ///
+    /// let params:Vec<_> = cmd.values_of("PARAM").unwrap().collect();
+    /// assert_eq!(params, vec!["foo=bar"]);
+    /// assert_eq!(cmd.value_of("NAME").unwrap(), "better_name");
+    /// assert_eq!(args.is_present("FORCE"), true);
+    /// ```
+    ///
+    /// Convenience: add ca-certificates
+    ///
+    /// ```
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "-f", "ca-certs", "-n", "my-certs", "-c", "/path/to/ca.crt"]);
+    /// let cmd = args.subcommand_matches("ca-certs").unwrap();
+    ///
+    ///
+    /// let certs:Vec<_> = cmd.values_of("CERT").unwrap().collect();
+    /// assert_eq!(certs, vec!["/path/to/ca.crt"]);
+    /// assert_eq!(cmd.value_of("NAME").unwrap(), "my-certs");
+    /// assert_eq!(args.is_present("FORCE"), true);
+    /// ```
+    ///
+    /// Convenience: add dependency-mappings
+    ///
+    /// ```
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "dependency-mapping", "-n", "my-deps", "-f", "/path/to/file.zip"]);
+    /// let cmd = args.subcommand_matches("dependency-mapping").unwrap();
+    ///
+    /// let files:Vec<_> = cmd.values_of("FILE").unwrap().collect();
+    /// assert_eq!(files, vec!["/path/to/file.zip"]);
+    /// assert_eq!(cmd.value_of("NAME").unwrap(), "my-deps");
+    /// assert_eq!(cmd.is_present("FORCE"), false);
+    /// ```
+    ///
+    /// Convenience: add dependency-mappings from buildpack
+    ///
+    /// ```
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "dependency-mapping", "-b", "buildpack/id-1:v1.0.1", "-b", "buildpack/id-2:v2.1.0"]);
+    /// let cmd = args.subcommand_matches("dependency-mapping").unwrap();
+    ///
+    /// let bps:Vec<_> = cmd.values_of("BUILDPACK").unwrap().collect();
+    /// assert_eq!(bps, vec!["buildpack/id-1:v1.0.1", "buildpack/id-2:v2.1.0"]);
+    /// assert_eq!(cmd.is_present("FORCE"), false);
+    /// ```
+    ///
+    /// Convenience: add arguments for docker run
+    ///
+    /// ```
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "args", "-d"]);
+    /// let cmd = args.subcommand_matches("args").unwrap();
+    ///
+    /// assert_eq!(cmd.is_present("DOCKER"), true);
+    /// assert_eq!(cmd.is_present("PACK"), false);
+    /// ```
+    ///
+    /// Convenience: add arguments for pack build
+    ///
+    /// ```
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "args", "-p"]);
+    /// let cmd = args.subcommand_matches("args").unwrap();
+    ///
+    /// assert_eq!(cmd.is_present("DOCKER"), false);
+    /// assert_eq!(cmd.is_present("PACK"), true);
+    /// ```
+    ///
+    pub fn parse_args<I, T>(self, args: I) -> clap::ArgMatches<'a>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<OsString> + Clone,
+    {
+        self.app.get_matches_from(args)
+    }
+
+    pub fn new() -> Parser<'a, 'b> {
+        Parser {
+            app: App::new(crate_name!())
+            .version(crate_version!())
+            .author(crate_authors!())
+            .about(crate_description!())
+            .arg(
+                Arg::with_name("FORCE")
+                    .short("f")
+                    .long("force")
+                    .takes_value(false)
+                    .help("force update if key exists"),
+            )
+            .subcommand(
+                SubCommand::with_name("add")
+                    .alias("a")
+                    .arg(
+                        Arg::with_name("NAME")
+                            .short("n")
+                            .long("name")
+                            .value_name("name")
+                            .required(false)
+                            .help("optional name for the binding,\nname defaults to the type"),
+                    )
+                    .arg(
+                        Arg::with_name("TYPE")
+                            .short("t")
+                            .long("type")
+                            .value_name("type")
+                            .help("type of binding")
+                            .required(true),
+                    )
+                    .arg(
+                        Arg::with_name("PARAM")
+                            .short("p")
+                            .long("param")
+                            .value_name("key=val")
+                            .multiple(true)
+                            .required(true)
+                            .help("key/value to set for the type"),
+                    )
+                    .about("Add or modify a binding")
+                    .after_help(include_str!("help/additional_help.txt")),
+            )
+            .subcommand(
+                SubCommand::with_name("delete")
+                    .alias("d")
+                    .arg(
+                        Arg::with_name("NAME")
+                            .short("n")
+                            .long("name")
+                            .value_name("name")
+                            .required(false)
+                            .help("optional name for the binding,\nname defaults to the type"),
+                    )
+                    .arg(
+                        Arg::with_name("TYPE")
+                            .short("t")
+                            .long("type")
+                            .value_name("type")
+                            .help("type of binding")
+                            .required(true),
+                    )
+                    .arg(
+                        Arg::with_name("PARAM")
+                            .short("p")
+                            .long("param")
+                            .value_name("key=val")
+                            .multiple(true)
+                            .required(false)
+                            .help("key/value to set for the type"),
+                    )
+                    .about("Delete a binding")
+                    .after_help(include_str!("help/additional_help.txt")),
+            )
+            .subcommand(
+                SubCommand::with_name("ca-certs")
+                    .alias("cc")
+                    .arg(
+                        Arg::with_name("NAME")
+                            .short("n")
+                            .long("name")
+                            .value_name("name")
+                            .required(false)
+                            .help("optional name for the binding,\nname defaults to the type"),
+                    )
+                    .arg(
+                        Arg::with_name("CERT")
+                            .short("c")
+                            .long("cert")
+                            .value_name("cert")
+                            .required(true)
+                            .multiple(true)
+                            .help("path to a CA certificate to add"),
+                    )
+                    .about("Convenience for adding `ca-certificates` bindings")
+                    .after_help(include_str!("help/additional_help.txt")),
+            )
+            .subcommand(
+                SubCommand::with_name("dependency-mapping")
+                    .alias("dm")
+                    .arg(
+                        Arg::with_name("NAME")
+                            .short("n")
+                            .long("name")
+                            .value_name("name")
+                            .required(false)
+                            .help("optional name for the binding,\nname defaults to the type"),
+                    )
+                    .arg(
+                        Arg::with_name("FILE")
+                            .short("f")
+                            .long("file")
+                            .value_name("file")
+                            .multiple(true)
+                            .conflicts_with("BUILDPACK")
+                            .help("path to local dependency file"),
+                    )
+                    .arg(
+                        Arg::with_name("BUILDPACK")
+                            .short("b")
+                            .long("buildpack")
+                            .value_name("buildpack")
+                            .multiple(true)
+                            .conflicts_with("FILE")
+                            .help("buildpack ID from which dependencies will be loaded"),
+                    )
+                    .about("Convenience for adding `dependency-mapping` bindings")
+                    .after_help(include_str!("help/additional_help.txt")),
+            )
+            .subcommand(
+                SubCommand::with_name("args")
+                    .arg(
+                        Arg::with_name("DOCKER")
+                            .short("d")
+                            .long("docker")
+                            .takes_value(false)
+                            .conflicts_with("PACK")
+                            .help("generates binding args for `docker run`"),
+                    )
+                    .arg(
+                        Arg::with_name("PACK")
+                            .short("p")
+                            .long("pack")
+                            .takes_value(false)
+                            .conflicts_with("DOCKER")
+                            .help("generates binding args for `pack build`"),
+                    )
+                    .about(
+                        "Convenience that generates binding args for `pack build` and `docker run`",
+                    )
+                    .after_help(include_str!("help/additional_help.txt")),
+            )
+        }
+    }
 }
 
 trait BindingConfirmer {
@@ -464,7 +477,7 @@ pub enum Command {
 }
 
 impl str::FromStr for Command {
-    type Err = ();
+    type Err = anyhow::Error;
 
     fn from_str(input: &str) -> Result<Command, Self::Err> {
         match input {
@@ -475,7 +488,7 @@ impl str::FromStr for Command {
                 DependencyMappingCommandHandler {},
             )),
             "args" => Ok(Command::Args(ArgsCommandHandler {})),
-            _ => Err(()),
+            _ => bail!("could not part argument"),
         }
     }
 }
@@ -545,15 +558,6 @@ pub struct ArgsCommandHandler {}
 
 impl<'a> CommandHandler<'a> for ArgsCommandHandler {
     fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
-        Ok(())
-    }
-}
-
-pub struct HelpCommandHandler {}
-
-impl<'a> CommandHandler<'a> for HelpCommandHandler {
-    fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
-        eprintln!("Help!!");
         Ok(())
     }
 }
