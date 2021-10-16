@@ -1,45 +1,19 @@
 use anyhow::Result;
+use binding_tool::{Command, CommandHandler, HelpCommandHandler};
 use std::env;
+use std::str::FromStr;
 
 fn main() -> Result<()> {
     let matches = binding_tool::parse_args(env::args());
+    let executed_command = matches.subcommand_name().unwrap_or("help");
+    let args = matches.subcommand_matches(executed_command);
 
-    // required (it's OK to unwrap)
-    let binding_type = matches.value_of("TYPE").unwrap();
-    let binding_key_vals = matches.values_of("PARAM").unwrap();
-
-    // optional (it's not OK to unwrap)
-    let binding_name = matches.value_of("NAME");
-
-    // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
-    let bindings_home = match env::var("SERVICE_BINDING_ROOT") {
-        Ok(root) => root,
-        Err(_) => env::current_dir()
-            .unwrap()
-            .join("bindings")
-            .to_str()
-            .unwrap()
-            .into(),
-    };
-
-    // process bindings
-    return if matches.is_present("FORCE") {
-        let btp = binding_tool::BindingProcessor::new(
-            &bindings_home,
-            binding_type,
-            binding_name,
-            binding_tool::TrueBindingConfirmer {},
-        );
-
-        btp.process_bindings(binding_key_vals)
-    } else {
-        let btp = binding_tool::BindingProcessor::new(
-            &bindings_home,
-            binding_type,
-            binding_name,
-            binding_tool::ConsoleBindingConfirmer {},
-        );
-
-        btp.process_bindings(binding_key_vals)
-    };
+    match Command::from_str(executed_command) {
+        Ok(Command::Add(handler)) => handler.handle(args),
+        Ok(Command::Delete(handler)) => handler.handle(args),
+        Ok(Command::CaCerts(handler)) => handler.handle(args),
+        Ok(Command::DependencyMapping(handler)) => handler.handle(args),
+        Ok(Command::Args(handler)) => handler.handle(args),
+        _ => HelpCommandHandler {}.handle(args),
+    }
 }

@@ -1,10 +1,11 @@
 use std::ffi::OsString;
 use std::io::{prelude::*, stdin};
-use std::{env, fs, path};
+use std::{env, fs, path, str};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use clap::{
-    crate_authors, crate_description, crate_name, crate_version, App, Arg, SubCommand, Values,
+    crate_authors, crate_description, crate_name, crate_version, App, Arg, ArgMatches, SubCommand,
+    Values,
 };
 
 /// Parse application arguments
@@ -276,11 +277,17 @@ where
         .get_matches_from(args);
 }
 
-pub trait BindingConfirmer {
+trait BindingConfirmer {
     fn confirm(&self) -> bool;
 }
 
-pub struct ConsoleBindingConfirmer {}
+pub enum BindingConfirmers {
+    Console,
+    Always,
+    Never,
+}
+
+struct ConsoleBindingConfirmer {}
 
 impl BindingConfirmer for ConsoleBindingConfirmer {
     fn confirm(&self) -> bool {
@@ -293,31 +300,36 @@ impl BindingConfirmer for ConsoleBindingConfirmer {
     }
 }
 
-pub struct TrueBindingConfirmer {}
+struct AlwaysBindingConfirmer {}
 
-impl BindingConfirmer for TrueBindingConfirmer {
+impl BindingConfirmer for AlwaysBindingConfirmer {
     fn confirm(&self) -> bool {
         true
     }
 }
 
-pub struct BindingProcessor<'a, T> {
+struct NeverBindingConfirmer {}
+
+impl BindingConfirmer for NeverBindingConfirmer {
+    fn confirm(&self) -> bool {
+        false
+    }
+}
+
+pub struct BindingProcessor<'a> {
     bindings_home: &'a str,
     binding_type: &'a str,
     binding_name: Option<&'a str>,
-    confirmer: T,
+    confirmer: BindingConfirmers,
 }
 
-impl<'a, T> BindingProcessor<'a, T>
-where
-    T: BindingConfirmer,
-{
+impl<'a> BindingProcessor<'a> {
     pub fn new(
         bindings_home: &'a str,
         binding_type: &'a str,
         binding_name: Option<&'a str>,
-        confirmer: T,
-    ) -> BindingProcessor<'a, T> {
+        confirmer: BindingConfirmers,
+    ) -> BindingProcessor<'a> {
         BindingProcessor {
             bindings_home,
             binding_type,
@@ -327,7 +339,7 @@ where
     }
 
     pub fn process_bindings(
-        self: &BindingProcessor<'a, T>,
+        self: &BindingProcessor<'a>,
         binding_key_vals: Values<'a>,
     ) -> Result<()> {
         for binding_key_val in binding_key_vals.clone() {
@@ -338,7 +350,7 @@ where
     }
 
     fn process_binding<S: AsRef<str>>(
-        self: &BindingProcessor<'a, T>,
+        self: &BindingProcessor<'a>,
         binding_key_val: S,
     ) -> Result<()> {
         let binding_path = path::Path::new(self.bindings_home)
@@ -348,7 +360,12 @@ where
             let writer = BindingWriter::new(binding_path, binding_key, binding_value);
 
             if writer.binding_key_path().exists() {
-                anyhow::ensure!(self.confirmer.confirm(), "binding already exists");
+                let result = match &self.confirmer {
+                    BindingConfirmers::Always => AlwaysBindingConfirmer {}.confirm(),
+                    BindingConfirmers::Never => NeverBindingConfirmer {}.confirm(),
+                    BindingConfirmers::Console => ConsoleBindingConfirmer {}.confirm(),
+                };
+                anyhow::ensure!(result, "binding already exists");
             }
 
             writer.write(self.binding_type)
@@ -434,24 +451,123 @@ where
     }
 }
 
+pub trait CommandHandler<'a> {
+    fn handle(&self, args: Option<&ArgMatches>) -> Result<()>;
+}
+
+pub enum Command {
+    Add(AddCommandHandler),
+    Delete(DeleteCommandHandler),
+    CaCerts(CaCertsCommandHandler),
+    DependencyMapping(DependencyMappingCommandHandler),
+    Args(ArgsCommandHandler),
+}
+
+impl str::FromStr for Command {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<Command, Self::Err> {
+        match input {
+            "add" => Ok(Command::Add(AddCommandHandler {})),
+            "delete" => Ok(Command::Delete(DeleteCommandHandler {})),
+            "ca-certs" => Ok(Command::CaCerts(CaCertsCommandHandler {})),
+            "dependency-mapping" => Ok(Command::DependencyMapping(
+                DependencyMappingCommandHandler {},
+            )),
+            "args" => Ok(Command::Args(ArgsCommandHandler {})),
+            _ => Err(()),
+        }
+    }
+}
+
+pub struct AddCommandHandler {}
+
+impl<'a> CommandHandler<'a> for AddCommandHandler {
+    fn handle(&self, args: Option<&ArgMatches>) -> Result<()> {
+        ensure!(args.is_some(), "missing required args");
+        let args = args.as_ref().unwrap();
+
+        // required (it's OK to unwrap)
+        let binding_type = args.value_of("TYPE").unwrap();
+        let binding_key_vals = args.values_of("PARAM").unwrap();
+
+        // optional (it's not OK to unwrap)
+        let binding_name = args.value_of("NAME");
+
+        // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
+        let bindings_home = match env::var("SERVICE_BINDING_ROOT") {
+            Ok(root) => root,
+            Err(_) => env::current_dir()
+                .unwrap()
+                .join("bindings")
+                .to_str()
+                .unwrap()
+                .into(),
+        };
+
+        let confirmer = if args.is_present("FORCE") {
+            BindingConfirmers::Always
+        } else {
+            BindingConfirmers::Console
+        };
+
+        // process bindings
+        let btp = BindingProcessor::new(&bindings_home, binding_type, binding_name, confirmer);
+        btp.process_bindings(binding_key_vals)
+    }
+}
+
+pub struct DeleteCommandHandler {}
+
+impl<'a> CommandHandler<'a> for DeleteCommandHandler {
+    fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
+        Ok(())
+    }
+}
+
+pub struct CaCertsCommandHandler {}
+
+impl<'a> CommandHandler<'a> for CaCertsCommandHandler {
+    fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
+        Ok(())
+    }
+}
+
+pub struct DependencyMappingCommandHandler {}
+
+impl<'a> CommandHandler<'a> for DependencyMappingCommandHandler {
+    fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
+        Ok(())
+    }
+}
+
+pub struct ArgsCommandHandler {}
+
+impl<'a> CommandHandler<'a> for ArgsCommandHandler {
+    fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
+        Ok(())
+    }
+}
+
+pub struct HelpCommandHandler {}
+
+impl<'a> CommandHandler<'a> for HelpCommandHandler {
+    fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
+        eprintln!("Help!!");
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    pub struct FalseBindingConfirmer {}
-
-    impl BindingConfirmer for FalseBindingConfirmer {
-        fn confirm(&self) -> bool {
-            false
-        }
-    }
 
     #[test]
     fn given_binding_args_it_creates_binding() {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
 
-        let bp = BindingProcessor::new(&tmppath, "testType", None, FalseBindingConfirmer {});
+        let bp = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
         let res = bp.process_binding("key=val");
 
         assert!(res.is_ok());
@@ -472,14 +588,14 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, FalseBindingConfirmer {});
+        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
         let res = bp1.process_binding("key=val");
 
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/type").exists());
         assert!(tmpdir.path().join("testType/key").exists());
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, FalseBindingConfirmer {});
+        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
         let res = bp1.process_binding("key=other_val");
         assert!(res.is_err());
 
@@ -497,14 +613,14 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, FalseBindingConfirmer {});
+        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
         let res = bp1.process_binding("key=val");
 
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/type").exists());
         assert!(tmpdir.path().join("testType/key").exists());
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, FalseBindingConfirmer {});
+        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
         let res = bp1.process_binding("other_key=other_val");
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/other_key").exists());
@@ -523,14 +639,14 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, FalseBindingConfirmer {});
+        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
         let res = bp1.process_binding("key=val");
 
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/type").exists());
         assert!(tmpdir.path().join("testType/key").exists());
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, TrueBindingConfirmer {});
+        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Always);
         let res = bp1.process_binding("key=new_val");
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/key").exists());
@@ -553,7 +669,7 @@ mod tests {
             &tmppath,
             "testType",
             Some("diff-name"),
-            FalseBindingConfirmer {},
+            BindingConfirmers::Never,
         );
         let res = bp.process_binding("key=val");
 
@@ -581,7 +697,7 @@ mod tests {
         let res = env::set_current_dir(&tmpdir);
         assert!(res.is_ok());
 
-        let bp = BindingProcessor::new(&tmppath, "testType", None, FalseBindingConfirmer {});
+        let bp = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
         let res = bp.process_binding("key=@val");
 
         assert!(res.is_ok(), "{}", res.unwrap_err());
@@ -612,7 +728,7 @@ mod tests {
         let res = fs::write(tmpdir.path().join("test/val"), "actual value");
         assert!(res.is_ok());
 
-        let bp = BindingProcessor::new(&tmppath, "testType", None, FalseBindingConfirmer {});
+        let bp = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
         let res = bp.process_binding(format!("key=@{}", val_path.to_string_lossy()));
 
         assert!(res.is_ok(), "{}", res.unwrap_err());
