@@ -185,7 +185,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                             .short("n")
                             .long("name")
                             .value_name("name")
-                            .required(false)
+                            .required_unless("TYPE")
                             .help("optional name for the binding,\nname defaults to the type"),
                     )
                     .arg(
@@ -193,6 +193,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                             .short("t")
                             .long("type")
                             .value_name("type")
+                            .required_unless("NAME")
                             .help("type of binding")
                             .required(true),
                     )
@@ -290,6 +291,19 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 }
 
+fn service_binding_root() -> String {
+    // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
+    match env::var("SERVICE_BINDING_ROOT") {
+        Ok(root) => root,
+        Err(_) => env::current_dir()
+            .unwrap()
+            .join("bindings")
+            .to_str()
+            .unwrap()
+            .into(),
+    }
+}
+
 trait BindingConfirmer {
     fn confirm(&self) -> bool;
 }
@@ -331,7 +345,7 @@ impl BindingConfirmer for NeverBindingConfirmer {
 
 pub struct BindingProcessor<'a> {
     bindings_home: &'a str,
-    binding_type: &'a str,
+    binding_type: Option<&'a str>,
     binding_name: Option<&'a str>,
     confirmer: BindingConfirmers,
 }
@@ -339,7 +353,7 @@ pub struct BindingProcessor<'a> {
 impl<'a> BindingProcessor<'a> {
     pub fn new(
         bindings_home: &'a str,
-        binding_type: &'a str,
+        binding_type: Option<&'a str>,
         binding_name: Option<&'a str>,
         confirmer: BindingConfirmers,
     ) -> BindingProcessor<'a> {
@@ -351,26 +365,35 @@ impl<'a> BindingProcessor<'a> {
         }
     }
 
-    pub fn process_bindings(
+    pub fn delete_bindings(
         self: &BindingProcessor<'a>,
-        binding_key_vals: Values<'a>,
+        _binding_key_vals: Option<Values<'a>>,
     ) -> Result<()> {
-        for binding_key_val in binding_key_vals.clone() {
-            self.process_binding(binding_key_val)?;
+        Ok(())
+    }
+
+    pub fn add_bindings(
+        self: &BindingProcessor<'a>,
+        binding_key_vals: Option<Values<'a>>,
+    ) -> Result<()> {
+        for binding_key_val in binding_key_vals.unwrap() {
+            self.add_binding(binding_key_val)?;
         }
 
         Ok(())
     }
 
-    fn process_binding<S: AsRef<str>>(
-        self: &BindingProcessor<'a>,
-        binding_key_val: S,
-    ) -> Result<()> {
-        let binding_path = path::Path::new(self.bindings_home)
-            .join(self.binding_name.unwrap_or(self.binding_type));
+    fn add_binding<S: AsRef<str>>(self: &BindingProcessor<'a>, binding_key_val: S) -> Result<()> {
+        ensure!(
+            self.binding_type.is_some(),
+            "binding type is required when adding a binding"
+        );
+        let binding_type = self.binding_type.unwrap();
+        let binding_path =
+            path::Path::new(self.bindings_home).join(self.binding_name.unwrap_or(binding_type));
 
         if let Some((binding_key, binding_value)) = binding_key_val.as_ref().split_once("=") {
-            let writer = BindingWriter::new(binding_path, binding_key, binding_value);
+            let writer = BindingWriter::new(binding_path, binding_type, binding_key, binding_value);
 
             if writer.binding_key_path().exists() {
                 let result = match &self.confirmer {
@@ -381,7 +404,7 @@ impl<'a> BindingProcessor<'a> {
                 anyhow::ensure!(result, "binding already exists");
             }
 
-            writer.write(self.binding_type)
+            writer.write()
         } else {
             Err(anyhow!(
                 "could not parse key/value -> {}",
@@ -393,6 +416,7 @@ impl<'a> BindingProcessor<'a> {
 
 struct BindingWriter<'a, P> {
     path: P,
+    b_type: &'a str,
     key: &'a str,
     value: &'a str,
 }
@@ -401,19 +425,24 @@ impl<'a, P> BindingWriter<'a, P>
 where
     P: AsRef<path::Path>,
 {
-    fn new(path: P, key: &'a str, value: &'a str) -> BindingWriter<'a, P> {
-        BindingWriter { path, key, value }
+    fn new(path: P, b_type: &'a str, key: &'a str, value: &'a str) -> BindingWriter<'a, P> {
+        BindingWriter {
+            path,
+            b_type,
+            key,
+            value,
+        }
     }
 
     fn binding_key_path(&self) -> path::PathBuf {
         self.path.as_ref().join(self.key)
     }
 
-    fn write(&self, binding_type: &'a str) -> Result<()> {
+    fn write(&self) -> Result<()> {
         fs::create_dir_all(self.path.as_ref())
             .with_context(|| format!("{}", self.path.as_ref().to_string_lossy()))?;
 
-        self.write_type(binding_type)?;
+        self.write_type()?;
 
         if self.value.starts_with('@') {
             self.write_key_as_file()?;
@@ -424,11 +453,11 @@ where
         Ok(())
     }
 
-    fn write_type(&self, binding_type: &'a str) -> Result<()> {
+    fn write_type(&self) -> Result<()> {
         let mut type_file = fs::File::create(self.path.as_ref().join("type"))
             .with_context(|| "cannot open type file")?;
         type_file
-            .write_all(binding_type.as_bytes())
+            .write_all(self.b_type.as_bytes())
             .with_context(|| "cannot write the type file")
     }
 
@@ -498,25 +527,17 @@ pub struct AddCommandHandler {}
 impl<'a> CommandHandler<'a> for AddCommandHandler {
     fn handle(&self, args: Option<&ArgMatches>) -> Result<()> {
         ensure!(args.is_some(), "missing required args");
-        let args = args.as_ref().unwrap();
+        let args = args.unwrap();
 
-        // required (it's OK to unwrap)
-        let binding_type = args.value_of("TYPE").unwrap();
-        let binding_key_vals = args.values_of("PARAM").unwrap();
+        let binding_key_vals = args.values_of("PARAM");
+        ensure!(
+            binding_key_vals.is_some(),
+            "binding parameter (key=val) is required"
+        );
 
-        // optional (it's not OK to unwrap)
+        let binding_type = args.value_of("TYPE");
         let binding_name = args.value_of("NAME");
-
-        // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
-        let bindings_home = match env::var("SERVICE_BINDING_ROOT") {
-            Ok(root) => root,
-            Err(_) => env::current_dir()
-                .unwrap()
-                .join("bindings")
-                .to_str()
-                .unwrap()
-                .into(),
-        };
+        let bindings_home = service_binding_root();
 
         let confirmer = if args.is_present("FORCE") {
             BindingConfirmers::Always
@@ -526,15 +547,36 @@ impl<'a> CommandHandler<'a> for AddCommandHandler {
 
         // process bindings
         let btp = BindingProcessor::new(&bindings_home, binding_type, binding_name, confirmer);
-        btp.process_bindings(binding_key_vals)
+        btp.add_bindings(binding_key_vals)
     }
 }
 
 pub struct DeleteCommandHandler {}
 
 impl<'a> CommandHandler<'a> for DeleteCommandHandler {
-    fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
-        Ok(())
+    fn handle(&self, args: Option<&ArgMatches>) -> Result<()> {
+        ensure!(args.is_some(), "missing required args");
+        let args = args.unwrap();
+
+        // one of these is required (it's not OK to unwrap)
+        let binding_type = args.value_of("TYPE");
+        let binding_name = args.value_of("NAME");
+
+        // not required (it's not OK to unwrap)
+        let binding_key_vals = args.values_of("PARAM");
+
+        // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
+        let bindings_home = service_binding_root();
+
+        let confirmer = if args.is_present("FORCE") {
+            BindingConfirmers::Never
+        } else {
+            BindingConfirmers::Console
+        };
+
+        // process bindings
+        let btp = BindingProcessor::new(&bindings_home, binding_type, binding_name, confirmer);
+        btp.delete_bindings(binding_key_vals)
     }
 }
 
@@ -571,8 +613,8 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
 
-        let bp = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
-        let res = bp.process_binding("key=val");
+        let bp = BindingProcessor::new(&tmppath, Some("testType"), None, BindingConfirmers::Never);
+        let res = bp.add_binding("key=val");
 
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/type").exists());
@@ -592,15 +634,15 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
-        let res = bp1.process_binding("key=val");
+        let bp1 = BindingProcessor::new(&tmppath, Some("testType"), None, BindingConfirmers::Never);
+        let res = bp1.add_binding("key=val");
 
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/type").exists());
         assert!(tmpdir.path().join("testType/key").exists());
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
-        let res = bp1.process_binding("key=other_val");
+        let bp1 = BindingProcessor::new(&tmppath, Some("testType"), None, BindingConfirmers::Never);
+        let res = bp1.add_binding("key=other_val");
         assert!(res.is_err());
 
         let data = fs::read(tmpdir.path().join("testType/type"));
@@ -617,15 +659,15 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
-        let res = bp1.process_binding("key=val");
+        let bp1 = BindingProcessor::new(&tmppath, Some("testType"), None, BindingConfirmers::Never);
+        let res = bp1.add_binding("key=val");
 
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/type").exists());
         assert!(tmpdir.path().join("testType/key").exists());
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
-        let res = bp1.process_binding("other_key=other_val");
+        let bp1 = BindingProcessor::new(&tmppath, Some("testType"), None, BindingConfirmers::Never);
+        let res = bp1.add_binding("other_key=other_val");
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/other_key").exists());
 
@@ -643,15 +685,16 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
-        let res = bp1.process_binding("key=val");
+        let bp1 = BindingProcessor::new(&tmppath, Some("testType"), None, BindingConfirmers::Never);
+        let res = bp1.add_binding("key=val");
 
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/type").exists());
         assert!(tmpdir.path().join("testType/key").exists());
 
-        let bp1 = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Always);
-        let res = bp1.process_binding("key=new_val");
+        let bp1 =
+            BindingProcessor::new(&tmppath, Some("testType"), None, BindingConfirmers::Always);
+        let res = bp1.add_binding("key=new_val");
         assert!(res.is_ok());
         assert!(tmpdir.path().join("testType/key").exists());
 
@@ -671,11 +714,11 @@ mod tests {
 
         let bp = BindingProcessor::new(
             &tmppath,
-            "testType",
+            Some("testType"),
             Some("diff-name"),
             BindingConfirmers::Never,
         );
-        let res = bp.process_binding("key=val");
+        let res = bp.add_binding("key=val");
 
         assert!(res.is_ok());
         assert!(tmpdir.path().join("diff-name/type").exists());
@@ -701,8 +744,8 @@ mod tests {
         let res = env::set_current_dir(&tmpdir);
         assert!(res.is_ok());
 
-        let bp = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
-        let res = bp.process_binding("key=@val");
+        let bp = BindingProcessor::new(&tmppath, Some("testType"), None, BindingConfirmers::Never);
+        let res = bp.add_binding("key=@val");
 
         assert!(res.is_ok(), "{}", res.unwrap_err());
         assert!(tmpdir.path().join("testType/type").exists());
@@ -732,8 +775,8 @@ mod tests {
         let res = fs::write(tmpdir.path().join("test/val"), "actual value");
         assert!(res.is_ok());
 
-        let bp = BindingProcessor::new(&tmppath, "testType", None, BindingConfirmers::Never);
-        let res = bp.process_binding(format!("key=@{}", val_path.to_string_lossy()));
+        let bp = BindingProcessor::new(&tmppath, Some("testType"), None, BindingConfirmers::Never);
+        let res = bp.add_binding(format!("key=@{}", val_path.to_string_lossy()));
 
         assert!(res.is_ok(), "{}", res.unwrap_err());
         assert!(tmpdir.path().join("testType/type").exists());
