@@ -5,7 +5,6 @@ use std::{env, fs, path, str};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use clap::{
     crate_authors, crate_description, crate_name, crate_version, App, Arg, ArgMatches, SubCommand,
-    Values,
 };
 
 pub struct Parser<'a, 'b> {
@@ -47,24 +46,21 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Basic: Delete an entire binding
     ///
     /// ```
-    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "delete", "-t", "binding"]);
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "delete", "-n", "binding"]);
     /// let cmd = args.subcommand_matches("delete").unwrap();
     ///
-    /// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
+    /// assert_eq!(cmd.value_of("NAME").unwrap(), "binding");
     /// assert!(cmd.values_of("PARAM").is_none());
-    /// assert_eq!(cmd.value_of("NAME"), None);
     /// ```
     ///
     /// More Advanced: Delete parts of a binding
     ///
     /// ```
-    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "-f", "delete", "-n", "better_name", "-t", "binding", "-p", "foo=bar"]);
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "-f", "delete", "-n", "better_name", "-k", "foo"]);
     /// let cmd = args.subcommand_matches("delete").unwrap();
     ///
-    /// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
-    ///
-    /// let params:Vec<_> = cmd.values_of("PARAM").unwrap().collect();
-    /// assert_eq!(params, vec!["foo=bar"]);
+    /// let params:Vec<_> = cmd.values_of("KEY").unwrap().collect();
+    /// assert_eq!(params, vec!["foo"]);
     /// assert_eq!(cmd.value_of("NAME").unwrap(), "better_name");
     /// assert_eq!(args.is_present("FORCE"), true);
     /// ```
@@ -185,26 +181,17 @@ impl<'a, 'b> Parser<'a, 'b> {
                             .short("n")
                             .long("name")
                             .value_name("name")
-                            .required_unless("TYPE")
-                            .help("optional name for the binding,\nname defaults to the type"),
+                            .required(true)
+                            .help("name for the binding"),
                     )
                     .arg(
-                        Arg::with_name("TYPE")
-                            .short("t")
-                            .long("type")
-                            .value_name("type")
-                            .required_unless("NAME")
-                            .help("type of binding")
-                            .required(true),
-                    )
-                    .arg(
-                        Arg::with_name("PARAM")
-                            .short("p")
-                            .long("param")
-                            .value_name("key=val")
+                        Arg::with_name("KEY")
+                            .short("k")
+                            .long("key")
+                            .value_name("key")
                             .multiple(true)
                             .required(false)
-                            .help("key/value to set for the type"),
+                            .help("specific key to delete"),
                     )
                     .about("Delete a binding")
                     .after_help(include_str!("help/additional_help.txt")),
@@ -365,18 +352,34 @@ impl<'a> BindingProcessor<'a> {
         }
     }
 
-    pub fn delete_bindings(
+    pub fn delete_bindings<I: Iterator<Item = &'a str> + Clone>(
         self: &BindingProcessor<'a>,
-        _binding_key_vals: Option<Values<'a>>,
+        binding_keys: I,
     ) -> Result<()> {
+        let root = path::Path::new(self.bindings_home);
+        ensure!(root.is_dir(), "bindings home must be a directory");
+
+        let binding_path = path::Path::new(self.bindings_home).join(self.binding_name.unwrap());
+
+        for binding_key in binding_keys.clone() {
+            let binding_key_path = binding_path.join(binding_key);
+            if binding_key_path.exists() {
+                fs::remove_file(binding_key_path)?;
+            }
+        }
+
+        if binding_keys.count() == 0 {
+            fs::remove_dir_all(binding_path)?
+        }
+
         Ok(())
     }
 
-    pub fn add_bindings(
+    pub fn add_bindings<I: Iterator<Item = &'a str>>(
         self: &BindingProcessor<'a>,
-        binding_key_vals: Option<Values<'a>>,
+        binding_key_vals: I,
     ) -> Result<()> {
-        for binding_key_val in binding_key_vals.unwrap() {
+        for binding_key_val in binding_key_vals {
             self.add_binding(binding_key_val)?;
         }
 
@@ -547,7 +550,7 @@ impl<'a> CommandHandler<'a> for AddCommandHandler {
 
         // process bindings
         let btp = BindingProcessor::new(&bindings_home, binding_type, binding_name, confirmer);
-        btp.add_bindings(binding_key_vals)
+        btp.add_bindings(binding_key_vals.unwrap())
     }
 }
 
@@ -558,12 +561,12 @@ impl<'a> CommandHandler<'a> for DeleteCommandHandler {
         ensure!(args.is_some(), "missing required args");
         let args = args.unwrap();
 
-        // one of these is required (it's not OK to unwrap)
-        let binding_type = args.value_of("TYPE");
+        // required (it's OK to unwrap)
         let binding_name = args.value_of("NAME");
+        ensure!(binding_name.is_some(), "binding name is required");
 
-        // not required (it's not OK to unwrap)
-        let binding_key_vals = args.values_of("PARAM");
+        // not required, but OK to use default (empty iterator)
+        let binding_key_vals = args.values_of("PARAM").unwrap_or_default();
 
         // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
         let bindings_home = service_binding_root();
@@ -575,7 +578,7 @@ impl<'a> CommandHandler<'a> for DeleteCommandHandler {
         };
 
         // process bindings
-        let btp = BindingProcessor::new(&bindings_home, binding_type, binding_name, confirmer);
+        let btp = BindingProcessor::new(&bindings_home, None, binding_name, confirmer);
         btp.delete_bindings(binding_key_vals)
     }
 }
@@ -607,6 +610,23 @@ impl<'a> CommandHandler<'a> for ArgsCommandHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn given_no_bindings_root_set_it_returns_current_working_directory() {
+        let root = super::service_binding_root();
+        assert!(root.starts_with(env::current_dir().unwrap().to_str().unwrap()));
+    }
+
+    #[test]
+    fn given_bindings_root_set_it_returns_bindings_root_dir() {
+        env::set_var("SERVICE_BINDING_ROOT", "/bindings");
+
+        let root = super::service_binding_root();
+
+        env::remove_var("SERVICE_BINDING_ROOT");
+
+        assert!(root.starts_with("/bindings"));
+    }
 
     #[test]
     fn given_binding_args_it_creates_binding() {
@@ -741,11 +761,19 @@ mod tests {
         let res = fs::write(tmpdir.path().join("val"), "actual value");
         assert!(res.is_ok());
 
+        let cur_dir = env::current_dir();
+        assert!(res.is_ok());
+
         let res = env::set_current_dir(&tmpdir);
         assert!(res.is_ok());
 
         let bp = BindingProcessor::new(&tmppath, Some("testType"), None, BindingConfirmers::Never);
         let res = bp.add_binding("key=@val");
+
+        {
+            let res = env::set_current_dir(cur_dir.unwrap());
+            assert!(res.is_ok());
+        }
 
         assert!(res.is_ok(), "{}", res.unwrap_err());
         assert!(tmpdir.path().join("testType/type").exists());
@@ -764,9 +792,6 @@ mod tests {
     fn given_binding_args_with_value_full_file_path_creates_binding_using_file_contents() {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
-
-        let res = env::set_current_dir(&tmpdir);
-        assert!(res.is_ok());
 
         let res = fs::create_dir_all(tmpdir.path().join("test"));
         assert!(res.is_ok());
@@ -789,5 +814,58 @@ mod tests {
         let data = fs::read(tmpdir.path().join("testType/key"));
         assert!(data.is_ok());
         assert_eq!(data.unwrap(), b"actual value");
+    }
+
+    #[test]
+    fn given_binding_it_deletes_the_binding() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let tmppath = tmpdir.path().to_string_lossy();
+
+        let bp = BindingProcessor::new(
+            &tmppath,
+            Some("some-type"),
+            Some("diff-name"),
+            BindingConfirmers::Never,
+        );
+        let res = bp.add_binding("key=val");
+
+        assert!(res.is_ok());
+        assert!(tmpdir.path().join("diff-name/type").exists());
+        assert!(tmpdir.path().join("diff-name/key").exists());
+
+        let tmp: Vec<&str> = vec![];
+        let res = bp.delete_bindings(tmp.into_iter());
+        assert!(res.is_ok());
+        assert!(!tmpdir.path().join("diff-name/type").exists());
+        assert!(!tmpdir.path().join("diff-name/key").exists());
+    }
+
+    #[test]
+    fn given_binding_and_key_it_deletes_the_specific_binding_key_only() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let tmppath = tmpdir.path().to_string_lossy();
+
+        let bp = BindingProcessor::new(
+            &tmppath,
+            Some("some-type"),
+            Some("diff-name"),
+            BindingConfirmers::Never,
+        );
+        let res = bp.add_binding("key1=val1");
+        assert!(res.is_ok());
+
+        let res = bp.add_binding("key2=val2");
+        assert!(res.is_ok());
+
+        assert!(tmpdir.path().join("diff-name/type").exists());
+        assert!(tmpdir.path().join("diff-name/key1").exists());
+        assert!(tmpdir.path().join("diff-name/key2").exists());
+
+        let tmp: Vec<&str> = vec!["key1"];
+        let res = bp.delete_bindings(tmp.into_iter());
+        assert!(res.is_ok());
+        assert!(tmpdir.path().join("diff-name/type").exists());
+        assert!(!tmpdir.path().join("diff-name/key1").exists());
+        assert!(tmpdir.path().join("diff-name/key2").exists());
     }
 }
