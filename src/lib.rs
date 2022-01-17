@@ -3,15 +3,13 @@ use std::io::{prelude::*, stdin};
 use std::{env, fs, path, str};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use clap::{
-    crate_authors, crate_description, crate_name, crate_version, App, Arg, ArgMatches, SubCommand,
-};
+use clap::{app_from_crate, App, Arg, ArgMatches};
 
-pub struct Parser<'a, 'b> {
-    app: clap::App<'a, 'b>,
+pub struct Parser<'a> {
+    app: clap::App<'a>,
 }
 
-impl<'a, 'b> Parser<'a, 'b> {
+impl<'a, 'b> Parser<'a> {
     /// Parse application arguments
     ///
     /// ### Examples
@@ -50,7 +48,6 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// let cmd = args.subcommand_matches("delete").unwrap();
     ///
     /// assert_eq!(cmd.value_of("NAME").unwrap(), "binding");
-    /// assert!(cmd.values_of("PARAM").is_none());
     /// ```
     ///
     /// More Advanced: Delete parts of a binding
@@ -87,7 +84,6 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// let files:Vec<_> = cmd.values_of("FILE").unwrap().collect();
     /// assert_eq!(files, vec!["/path/to/file.zip"]);
     /// assert_eq!(cmd.value_of("NAME").unwrap(), "my-deps");
-    /// assert_eq!(cmd.is_present("FORCE"), false);
     /// ```
     ///
     /// Convenience: add dependency-mappings from buildpack
@@ -98,7 +94,6 @@ impl<'a, 'b> Parser<'a, 'b> {
     ///
     /// let bps:Vec<_> = cmd.values_of("BUILDPACK").unwrap().collect();
     /// assert_eq!(bps, vec!["buildpack/id-1:v1.0.1", "buildpack/id-2:v2.1.0"]);
-    /// assert_eq!(cmd.is_present("FORCE"), false);
     /// ```
     ///
     /// Convenience: add arguments for docker run
@@ -121,7 +116,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// assert_eq!(cmd.is_present("PACK"), true);
     /// ```
     ///
-    pub fn parse_args<I, T>(self, args: I) -> clap::ArgMatches<'a>
+    pub fn parse_args<I, T>(self, args: I) -> clap::ArgMatches
     where
         I: IntoIterator<Item = T>,
         T: Into<OsString> + Clone,
@@ -129,141 +124,138 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.app.get_matches_from(args)
     }
 
-    pub fn new() -> Parser<'a, 'b> {
+    pub fn new() -> Parser<'a> {
         Parser {
-            app: App::new(crate_name!())
-            .version(crate_version!())
-            .author(crate_authors!())
-            .about(crate_description!())
+            app: app_from_crate!()
             .arg(
-                Arg::with_name("FORCE")
-                    .short("f")
+                Arg::new("FORCE")
+                    .short('f')
                     .long("force")
                     .takes_value(false)
                     .help("force update if key exists"),
             )
             .subcommand(
-                SubCommand::with_name("add")
+                App::new("add")
                     .alias("a")
                     .arg(
-                        Arg::with_name("NAME")
-                            .short("n")
+                        Arg::new("NAME")
+                            .short('n')
                             .long("name")
                             .value_name("name")
                             .required(false)
                             .help("optional name for the binding,\nname defaults to the type"),
                     )
                     .arg(
-                        Arg::with_name("TYPE")
-                            .short("t")
+                        Arg::new("TYPE")
+                            .short('t')
                             .long("type")
                             .value_name("type")
                             .help("type of binding")
                             .required(true),
                     )
                     .arg(
-                        Arg::with_name("PARAM")
-                            .short("p")
+                        Arg::new("PARAM")
+                            .short('p')
                             .long("param")
                             .value_name("key=val")
-                            .multiple(true)
+                            .multiple_occurrences(true)
                             .required(true)
                             .help("key/value to set for the type"),
                     )
                     .about("Add or modify a binding")
-                    .after_help(include_str!("help/additional_help.txt")),
+                    .after_help( include_str!("help/additional_help_param.txt")),
             )
             .subcommand(
-                SubCommand::with_name("delete")
+                App::new("delete")
                     .alias("d")
                     .arg(
-                        Arg::with_name("NAME")
-                            .short("n")
+                        Arg::new("NAME")
+                            .short('n')
                             .long("name")
                             .value_name("name")
                             .required(true)
                             .help("name for the binding"),
                     )
                     .arg(
-                        Arg::with_name("KEY")
-                            .short("k")
+                        Arg::new("KEY")
+                            .short('k')
                             .long("key")
                             .value_name("key")
-                            .multiple(true)
+                            .multiple_occurrences(true)
                             .required(false)
                             .help("specific key to delete"),
                     )
                     .about("Delete a binding")
-                    .after_help(include_str!("help/additional_help.txt")),
+                    .after_help(include_str!("help/additional_help_binding.txt")),
             )
             .subcommand(
-                SubCommand::with_name("ca-certs")
+                App::new("ca-certs")
                     .alias("cc")
                     .arg(
-                        Arg::with_name("NAME")
-                            .short("n")
+                        Arg::new("NAME")
+                            .short('n')
                             .long("name")
                             .value_name("name")
                             .required(false)
                             .help("optional name for the binding,\nname defaults to the type"),
                     )
                     .arg(
-                        Arg::with_name("CERT")
-                            .short("c")
+                        Arg::new("CERT")
+                            .short('c')
                             .long("cert")
                             .value_name("cert")
                             .required(true)
-                            .multiple(true)
+                            .multiple_occurrences(true)
                             .help("path to a CA certificate to add"),
                     )
                     .about("Convenience for adding `ca-certificates` bindings")
-                    .after_help(include_str!("help/additional_help.txt")),
+                    .after_help(include_str!("help/additional_help_binding.txt")),
             )
             .subcommand(
-                SubCommand::with_name("dependency-mapping")
+                App::new("dependency-mapping")
                     .alias("dm")
                     .arg(
-                        Arg::with_name("NAME")
-                            .short("n")
+                        Arg::new("NAME")
+                            .short('n')
                             .long("name")
                             .value_name("name")
                             .required(false)
                             .help("optional name for the binding,\nname defaults to the type"),
                     )
                     .arg(
-                        Arg::with_name("FILE")
-                            .short("f")
+                        Arg::new("FILE")
+                            .short('f')
                             .long("file")
                             .value_name("file")
-                            .multiple(true)
+                            .multiple_occurrences(true)
                             .conflicts_with("BUILDPACK")
                             .help("path to local dependency file"),
                     )
                     .arg(
-                        Arg::with_name("BUILDPACK")
-                            .short("b")
+                        Arg::new("BUILDPACK")
+                            .short('b')
                             .long("buildpack")
                             .value_name("buildpack")
-                            .multiple(true)
+                            .multiple_occurrences(true)
                             .conflicts_with("FILE")
                             .help("buildpack ID from which dependencies will be loaded"),
                     )
                     .about("Convenience for adding `dependency-mapping` bindings")
-                    .after_help(include_str!("help/additional_help.txt")),
+                    .after_help(include_str!("help/additional_help_binding.txt")),
             )
             .subcommand(
-                SubCommand::with_name("args")
+                App::new("args")
                     .arg(
-                        Arg::with_name("DOCKER")
-                            .short("d")
+                        Arg::new("DOCKER")
+                            .short('d')
                             .long("docker")
                             .takes_value(false)
                             .conflicts_with("PACK")
                             .help("generates binding args for `docker run`"),
                     )
                     .arg(
-                        Arg::with_name("PACK")
-                            .short("p")
+                        Arg::new("PACK")
+                            .short('p')
                             .long("pack")
                             .takes_value(false)
                             .conflicts_with("DOCKER")
@@ -272,7 +264,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     .about(
                         "Convenience that generates binding args for `pack build` and `docker run`",
                     )
-                    .after_help(include_str!("help/additional_help.txt")),
+                    .after_help(include_str!("help/additional_help_binding.txt")),
             )
         }
     }

@@ -9,8 +9,9 @@ description = "Generate Kubernetes service bindings for use with Cloud Native Bu
 anyhow = "1.0"
 
 [dependencies.clap]
-version = "2.33"
+version = "3.0"
 default-features = false
+features = ["std", "cargo"]
 
 [dev_dependencies]
 tempfile = "3"

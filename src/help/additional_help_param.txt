@@ -8,8 +8,8 @@ are accepted.
 
 Ex:  `-p my_cert=@path/to/my_cert.pem`
 
+All types and param key names must be valid file names.
+
 By default bindings will be generated under `./bindings`,
 however you may set `SERVICE_BINDING_ROOT` to change this
 location.
-
-All types and param key names must be valid file names.
