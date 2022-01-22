@@ -603,8 +603,38 @@ impl<'a> CommandHandler<'a> for DeleteCommandHandler {
 pub struct CaCertsCommandHandler {}
 
 impl<'a> CommandHandler<'a> for CaCertsCommandHandler {
-    fn handle(&mut self, _args: Option<&ArgMatches>) -> Result<()> {
-        todo!()
+    fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()> {
+        ensure!(args.is_some(), "missing required args");
+        let args = args.unwrap();
+
+        let bindings_home = service_binding_root();
+        let binding_name = args.value_of("NAME").unwrap_or("ca-certificates");
+        let certs = args.values_of("CERT");
+
+        let confirmer = if args.is_present("FORCE") {
+            BindingConfirmers::Always
+        } else {
+            BindingConfirmers::Console
+        };
+
+        // process bindings
+        let btp = BindingProcessor::new(
+            &bindings_home,
+            Some("ca-certificates"),
+            Some(binding_name),
+            confirmer,
+        );
+
+        let cert_args: Vec<String> = certs
+            .unwrap()
+            .enumerate()
+            .map(|(i, c)| match path::Path::new(c).file_name() {
+                Some(file_name) => format!("{}=@{}", file_name.to_string_lossy(), c),
+                None => format!("cert-{}=@{}", i, c),
+            })
+            .collect();
+
+        btp.add_bindings(cert_args.iter().map(|s| &s[..]))
     }
 }
 
