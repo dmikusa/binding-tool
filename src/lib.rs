@@ -30,7 +30,7 @@ impl<'a, 'b> Parser<'a> {
     /// More Advanced: Add with multiple parameters and a name
     ///
     /// ```
-    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "-f", "add", "-n", "better_name", "-t", "binding", "-p", "foo=bar", "-p", "gorilla=banana"]);
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "add", "-f", "-n", "better_name", "-t", "binding", "-p", "foo=bar", "-p", "gorilla=banana"]);
     /// let cmd = args.subcommand_matches("add").unwrap();
     ///
     /// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
@@ -38,7 +38,7 @@ impl<'a, 'b> Parser<'a> {
     /// let params:Vec<_> = cmd.values_of("PARAM").unwrap().collect();
     /// assert_eq!(params, vec!["foo=bar", "gorilla=banana"]);
     /// assert_eq!(cmd.value_of("NAME").unwrap(), "better_name");
-    /// assert_eq!(args.is_present("FORCE"), true);
+    /// assert_eq!(cmd.is_present("FORCE"), true);
     /// ```
     ///
     /// Basic: Delete an entire binding
@@ -53,35 +53,35 @@ impl<'a, 'b> Parser<'a> {
     /// More Advanced: Delete parts of a binding
     ///
     /// ```
-    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "-f", "delete", "-n", "better_name", "-k", "foo"]);
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "delete", "-f", "-n", "better_name", "-k", "foo"]);
     /// let cmd = args.subcommand_matches("delete").unwrap();
     ///
-    /// let params:Vec<_> = cmd.values_of("KEY").unwrap().collect();
-    /// assert_eq!(params, vec!["foo"]);
+    /// let keys:Vec<_> = cmd.values_of("KEY").unwrap().collect();
+    /// assert_eq!(keys, vec!["foo"]);
     /// assert_eq!(cmd.value_of("NAME").unwrap(), "better_name");
-    /// assert_eq!(args.is_present("FORCE"), true);
+    /// assert_eq!(cmd.is_present("FORCE"), true);
     /// ```
     ///
     /// Convenience: add ca-certificates
     ///
     /// ```
-    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "-f", "ca-certs", "-n", "my-certs", "-c", "/path/to/ca.crt"]);
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "ca-certs", "-f", "-n", "my-certs", "-c", "/path/to/ca.crt"]);
     /// let cmd = args.subcommand_matches("ca-certs").unwrap();
     ///
     ///
     /// let certs:Vec<_> = cmd.values_of("CERT").unwrap().collect();
     /// assert_eq!(certs, vec!["/path/to/ca.crt"]);
     /// assert_eq!(cmd.value_of("NAME").unwrap(), "my-certs");
-    /// assert_eq!(args.is_present("FORCE"), true);
+    /// assert_eq!(cmd.is_present("FORCE"), true);
     /// ```
     ///
     /// Convenience: add dependency-mappings
     ///
     /// ```
-    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "dependency-mapping", "-n", "my-deps", "-f", "/path/to/file.zip"]);
+    /// let args = binding_tool::Parser::new().parse_args(vec!["bt", "dependency-mapping", "-n", "my-deps", "-t", "/path/to/file.zip"]);
     /// let cmd = args.subcommand_matches("dependency-mapping").unwrap();
     ///
-    /// let files:Vec<_> = cmd.values_of("FILE").unwrap().collect();
+    /// let files:Vec<_> = cmd.values_of("TOML").unwrap().collect();
     /// assert_eq!(files, vec!["/path/to/file.zip"]);
     /// assert_eq!(cmd.value_of("NAME").unwrap(), "my-deps");
     /// ```
@@ -140,18 +140,18 @@ impl<'a, 'b> Parser<'a> {
     }
 
     pub fn new() -> Parser<'a> {
+        let force = Arg::new("FORCE")
+            .short('f')
+            .long("force")
+            .takes_value(false)
+            .help("force update if key exists");
+
         Parser {
             app: app_from_crate!()
-            .arg(
-                Arg::new("FORCE")
-                    .short('f')
-                    .long("force")
-                    .takes_value(false)
-                    .help("force update if key exists"),
-            )
             .subcommand(
                 App::new("add")
                     .alias("a")
+                    .arg(&force)
                     .arg(
                         Arg::new("NAME")
                             .short('n')
@@ -183,6 +183,7 @@ impl<'a, 'b> Parser<'a> {
             .subcommand(
                 App::new("delete")
                     .alias("d")
+                    .arg(&force)
                     .arg(
                         Arg::new("NAME")
                             .short('n')
@@ -206,6 +207,7 @@ impl<'a, 'b> Parser<'a> {
             .subcommand(
                 App::new("ca-certs")
                     .alias("cc")
+                    .arg(&force)
                     .arg(
                         Arg::new("NAME")
                             .short('n')
@@ -229,6 +231,7 @@ impl<'a, 'b> Parser<'a> {
             .subcommand(
                 App::new("dependency-mapping")
                     .alias("dm")
+                    .arg(&force)
                     .arg(
                         Arg::new("NAME")
                             .short('n')
@@ -238,13 +241,13 @@ impl<'a, 'b> Parser<'a> {
                             .help("optional name for the binding,\nname defaults to the type"),
                     )
                     .arg(
-                        Arg::new("FILE")
-                            .short('f')
-                            .long("file")
-                            .value_name("file")
+                        Arg::new("TOML")
+                            .short('t')
+                            .long("toml")
+                            .value_name("toml")
                             .multiple_occurrences(true)
                             .conflicts_with("BUILDPACK")
-                            .help("path to local dependency file"),
+                            .help("path to local buildpack.toml file with metadata dependencies"),
                     )
                     .arg(
                         Arg::new("BUILDPACK")
@@ -252,7 +255,7 @@ impl<'a, 'b> Parser<'a> {
                             .long("buildpack")
                             .value_name("buildpack")
                             .multiple_occurrences(true)
-                            .conflicts_with("FILE")
+                            .conflicts_with("TOML")
                             .help("buildpack ID from which dependencies will be loaded"),
                     )
                     .about("Convenience for adding `dependency-mapping` bindings")
@@ -580,7 +583,7 @@ impl<'a> CommandHandler<'a> for DeleteCommandHandler {
         ensure!(binding_name.is_some(), "binding name is required");
 
         // not required, but OK to use default (empty iterator)
-        let binding_key_vals = args.values_of("PARAM").unwrap_or_default();
+        let binding_key_vals = args.values_of("KEY").unwrap_or_default();
 
         // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
         let bindings_home = service_binding_root();
