@@ -1,9 +1,9 @@
 use std::ffi::OsString;
-use std::io::{prelude::*, stdin};
+use std::io::{prelude::*, stdin, Stdout};
 use std::{env, fs, path, str};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use clap::{app_from_crate, App, Arg, ArgMatches};
+use clap::{app_from_crate, App, Arg, ArgGroup, ArgMatches};
 
 pub struct Parser<'a> {
     app: clap::App<'a>,
@@ -116,12 +116,27 @@ impl<'a, 'b> Parser<'a> {
     /// assert_eq!(cmd.is_present("PACK"), true);
     /// ```
     ///
+    /// Convenience: don't set the type of args and fails
+    ///
+    /// ```
+    /// let res = binding_tool::Parser::new().try_parse_args(vec!["bt", "args"]);
+    /// assert!(res.is_err(), "should require a argument");
+    /// ```
+    ///
     pub fn parse_args<I, T>(self, args: I) -> clap::ArgMatches
     where
         I: IntoIterator<Item = T>,
         T: Into<OsString> + Clone,
     {
         self.app.get_matches_from(args)
+    }
+
+    pub fn try_parse_args<I, T>(self, args: I) -> clap::Result<clap::ArgMatches>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<OsString> + Clone,
+    {
+        self.app.try_get_matches_from(args)
     }
 
     pub fn new() -> Parser<'a> {
@@ -260,6 +275,11 @@ impl<'a, 'b> Parser<'a> {
                             .takes_value(false)
                             .conflicts_with("DOCKER")
                             .help("generates binding args for `pack build`"),
+                    )
+                    .group(
+                        ArgGroup::new("TYPES")
+                            .args(&["DOCKER", "PACK"])
+                            .required(true)
                     )
                     .about(
                         "Convenience that generates binding args for `pack build` and `docker run`",
@@ -489,7 +509,7 @@ where
 }
 
 pub trait CommandHandler<'a> {
-    fn handle(&self, args: Option<&ArgMatches>) -> Result<()>;
+    fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()>;
 }
 
 pub enum Command {
@@ -497,7 +517,7 @@ pub enum Command {
     Delete(DeleteCommandHandler),
     CaCerts(CaCertsCommandHandler),
     DependencyMapping(DependencyMappingCommandHandler),
-    Args(ArgsCommandHandler),
+    Args(ArgsCommandHandler<Stdout>),
 }
 
 impl str::FromStr for Command {
@@ -511,7 +531,9 @@ impl str::FromStr for Command {
             "dependency-mapping" => Ok(Command::DependencyMapping(
                 DependencyMappingCommandHandler {},
             )),
-            "args" => Ok(Command::Args(ArgsCommandHandler {})),
+            "args" => Ok(Command::Args(ArgsCommandHandler {
+                output: std::io::stdout(),
+            })),
             _ => bail!("could not part argument"),
         }
     }
@@ -520,7 +542,7 @@ impl str::FromStr for Command {
 pub struct AddCommandHandler {}
 
 impl<'a> CommandHandler<'a> for AddCommandHandler {
-    fn handle(&self, args: Option<&ArgMatches>) -> Result<()> {
+    fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()> {
         ensure!(args.is_some(), "missing required args");
         let args = args.unwrap();
 
@@ -549,7 +571,7 @@ impl<'a> CommandHandler<'a> for AddCommandHandler {
 pub struct DeleteCommandHandler {}
 
 impl<'a> CommandHandler<'a> for DeleteCommandHandler {
-    fn handle(&self, args: Option<&ArgMatches>) -> Result<()> {
+    fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()> {
         ensure!(args.is_some(), "missing required args");
         let args = args.unwrap();
 
@@ -578,30 +600,99 @@ impl<'a> CommandHandler<'a> for DeleteCommandHandler {
 pub struct CaCertsCommandHandler {}
 
 impl<'a> CommandHandler<'a> for CaCertsCommandHandler {
-    fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
-        Ok(())
+    fn handle(&mut self, _args: Option<&ArgMatches>) -> Result<()> {
+        todo!()
     }
 }
 
 pub struct DependencyMappingCommandHandler {}
 
 impl<'a> CommandHandler<'a> for DependencyMappingCommandHandler {
-    fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
-        Ok(())
+    fn handle(&mut self, _args: Option<&ArgMatches>) -> Result<()> {
+        todo!()
     }
 }
 
-pub struct ArgsCommandHandler {}
+pub struct ArgsCommandHandler<T> {
+    output: T,
+}
 
-impl<'a> CommandHandler<'a> for ArgsCommandHandler {
-    fn handle(&self, _args: Option<&ArgMatches>) -> Result<()> {
+impl<'a, T> CommandHandler<'a> for ArgsCommandHandler<T>
+where
+    T: Write,
+{
+    fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()> {
+        ensure!(args.is_some(), "missing required args");
+        let args = args.unwrap();
+
+        // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
+        let bindings_root = service_binding_root();
+        let bindings_home = path::Path::new(&bindings_root);
+
+        if !bindings_home.exists() {
+            return Ok(());
+        }
+
+        let binding_count = bindings_home
+            .read_dir()?
+            .filter_map(|res| res.ok())
+            .filter(|entry| entry.path().is_dir() && entry.path().join("type").exists())
+            .count();
+        if binding_count == 0 {
+            return Ok(());
+        }
+
+        match (args.is_present("DOCKER"), args.is_present("PACK")) {
+            (false, true) => write!(
+                self.output,
+                r#"--volume "{}:/binding" --env SERVICE_BINDING_ROOT=/bindings"#,
+                bindings_root
+            )?,
+            (true, false) => write!(
+                self.output,
+                r#"--volume "{}:/binding" --env SERVICE_BINDING_ROOT=/bindings"#,
+                bindings_root
+            )?,
+            _ => bail!("cannot have both docker and pack flags"),
+        };
+
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::Utf8Error;
+
     use super::*;
+
+    pub struct TestBuffer {
+        buffer: Vec<u8>,
+    }
+
+    impl Write for TestBuffer {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.buffer.write(buf)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.buffer.flush()
+        }
+    }
+
+    impl TestBuffer {
+        pub fn new() -> TestBuffer {
+            TestBuffer { buffer: vec![] }
+        }
+
+        pub fn writer(&mut self) -> &mut impl Write {
+            &mut self.buffer
+        }
+
+        pub fn string(&self) -> Result<&str, Utf8Error> {
+            str::from_utf8(&self.buffer)
+        }
+    }
 
     #[test]
     fn given_no_bindings_root_set_it_returns_current_working_directory() {
@@ -611,13 +702,10 @@ mod tests {
 
     #[test]
     fn given_bindings_root_set_it_returns_bindings_root_dir() {
-        env::set_var("SERVICE_BINDING_ROOT", "/bindings");
-
-        let root = super::service_binding_root();
-
-        env::remove_var("SERVICE_BINDING_ROOT");
-
-        assert!(root.starts_with("/bindings"));
+        temp_env::with_var("SERVICE_BINDING_ROOT", Some("/bindings"), || {
+            let root = super::service_binding_root();
+            assert!(root.starts_with("/bindings"));
+        });
     }
 
     #[test]
@@ -859,5 +947,71 @@ mod tests {
         assert!(tmpdir.path().join("diff-name/type").exists());
         assert!(!tmpdir.path().join("diff-name/key1").exists());
         assert!(tmpdir.path().join("diff-name/key2").exists());
+    }
+
+    #[test]
+    fn given_a_binding_args_outputs() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let tmppath = tmpdir.path().to_string_lossy();
+
+        temp_env::with_var("SERVICE_BINDING_ROOT", Some(tmpdir.as_ref()), || {
+            // make some bindings, required
+
+            let bp = BindingProcessor::new(
+                &tmppath,
+                Some("some-type"),
+                Some("diff-name"),
+                BindingConfirmers::Never,
+            );
+            let res = bp.add_binding("key1=val1");
+            assert!(res.is_ok());
+
+            // check args
+            let args = Parser::new().parse_args(vec!["bt", "args", "--docker"]);
+            let cmd = args.subcommand_matches("args").unwrap();
+            let mut tb = TestBuffer::new();
+            let res = ArgsCommandHandler {
+                output: tb.writer(),
+            }
+            .handle(Some(cmd));
+            assert!(res.is_ok(), "args handler should succeed");
+            assert_eq!(
+                tb.string().unwrap(),
+                format!(
+                    r#"--volume "{}:/binding" --env SERVICE_BINDING_ROOT=/bindings"#,
+                    tmppath
+                )
+            );
+        });
+    }
+
+    #[test]
+    fn write_to_test_buffer() {
+        struct Junk<'t, T>
+        where
+            T: Write,
+        {
+            output: &'t mut T,
+        }
+
+        impl<'t, T> Junk<'t, T>
+        where
+            T: Write,
+        {
+            pub fn do_stuff(&mut self) {
+                write!(self.output, "Hello World!").unwrap();
+            }
+        }
+
+        let mut tb = TestBuffer::new();
+        let mut j = Junk {
+            output: tb.writer(),
+        };
+        j.do_stuff();
+        assert_eq!(tb.string().unwrap(), "Hello World!");
+
+        let mut buf = std::io::stdout();
+        let mut j = Junk { output: &mut buf };
+        j.do_stuff();
     }
 }

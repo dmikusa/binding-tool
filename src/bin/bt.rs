@@ -10,11 +10,11 @@ fn main() -> Result<()> {
     let args = matches.subcommand_matches(executed_command);
 
     match Command::from_str(executed_command) {
-        Ok(Command::Add(handler)) => handler.handle(args),
-        Ok(Command::Delete(handler)) => handler.handle(args),
-        Ok(Command::CaCerts(handler)) => handler.handle(args),
-        Ok(Command::DependencyMapping(handler)) => handler.handle(args),
-        Ok(Command::Args(handler)) => handler.handle(args),
+        Ok(Command::Add(mut handler)) => handler.handle(args),
+        Ok(Command::Delete(mut handler)) => handler.handle(args),
+        Ok(Command::CaCerts(mut handler)) => handler.handle(args),
+        Ok(Command::DependencyMapping(mut handler)) => handler.handle(args),
+        Ok(Command::Args(mut handler)) => handler.handle(args),
         Err(err) => Err(err),
     }
 }
