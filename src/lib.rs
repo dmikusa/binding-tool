@@ -307,7 +307,7 @@ fn service_binding_root() -> String {
 }
 
 trait BindingConfirmer {
-    fn confirm(&self) -> bool;
+    fn confirm(&self, msg: &str) -> bool;
 }
 
 pub enum BindingConfirmers {
@@ -316,11 +316,21 @@ pub enum BindingConfirmers {
     Never,
 }
 
+impl BindingConfirmers {
+    pub fn confirm(&self, msg: &str) -> bool {
+        match self {
+            BindingConfirmers::Always => AlwaysBindingConfirmer {}.confirm(msg),
+            BindingConfirmers::Never => NeverBindingConfirmer {}.confirm(msg),
+            BindingConfirmers::Console => ConsoleBindingConfirmer {}.confirm(msg),
+        }
+    }
+}
+
 struct ConsoleBindingConfirmer {}
 
 impl BindingConfirmer for ConsoleBindingConfirmer {
-    fn confirm(&self) -> bool {
-        println!("The binding alread exists, do you wish to continue? (yes or no)");
+    fn confirm(&self, msg: &str) -> bool {
+        println!("{} (yes or no)", msg);
 
         let mut input: String = String::new();
         let res = stdin().lock().read_line(&mut input);
@@ -332,7 +342,7 @@ impl BindingConfirmer for ConsoleBindingConfirmer {
 struct AlwaysBindingConfirmer {}
 
 impl BindingConfirmer for AlwaysBindingConfirmer {
-    fn confirm(&self) -> bool {
+    fn confirm(&self, _: &str) -> bool {
         true
     }
 }
@@ -340,7 +350,7 @@ impl BindingConfirmer for AlwaysBindingConfirmer {
 struct NeverBindingConfirmer {}
 
 impl BindingConfirmer for NeverBindingConfirmer {
-    fn confirm(&self) -> bool {
+    fn confirm(&self, _: &str) -> bool {
         false
     }
 }
@@ -379,11 +389,23 @@ impl<'a> BindingProcessor<'a> {
         for binding_key in binding_keys.clone() {
             let binding_key_path = binding_path.join(binding_key);
             if binding_key_path.exists() {
+                let result = &self.confirmer.confirm(&format!(
+                    "Are you sure you want to delete {}?",
+                    binding_key_path.to_string_lossy()
+                ));
+
+                anyhow::ensure!(result, "confirmation declined, exiting");
                 fs::remove_file(binding_key_path)?;
             }
         }
 
         if binding_keys.count() == 0 {
+            let result = &self.confirmer.confirm(&format!(
+                "Are you sure you want to delete {}?",
+                binding_path.to_string_lossy()
+            ));
+
+            anyhow::ensure!(result, "confirmation declined, exiting");
             fs::remove_dir_all(binding_path)?
         }
 
@@ -414,11 +436,10 @@ impl<'a> BindingProcessor<'a> {
             let writer = BindingWriter::new(binding_path, binding_type, binding_key, binding_value);
 
             if writer.binding_key_path().exists() {
-                let result = match &self.confirmer {
-                    BindingConfirmers::Always => AlwaysBindingConfirmer {}.confirm(),
-                    BindingConfirmers::Never => NeverBindingConfirmer {}.confirm(),
-                    BindingConfirmers::Console => ConsoleBindingConfirmer {}.confirm(),
-                };
+                let result = &self
+                    .confirmer
+                    .confirm("The binding alread exists, do you wish to continue?");
+
                 anyhow::ensure!(result, "binding already exists");
             }
 
@@ -941,7 +962,7 @@ mod tests {
             &tmppath,
             Some("some-type"),
             Some("diff-name"),
-            BindingConfirmers::Never,
+            BindingConfirmers::Always,
         );
         let res = bp.add_binding("key=val");
 
@@ -957,7 +978,60 @@ mod tests {
     }
 
     #[test]
+    fn given_a_binding_and_user_declines_it_doesnt_delete_the_binding() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let tmppath = tmpdir.path().to_string_lossy();
+
+        let bp = BindingProcessor::new(
+            &tmppath,
+            Some("some-type"),
+            Some("diff-name"),
+            BindingConfirmers::Never,
+        );
+        let res = bp.add_binding("key=val");
+
+        assert!(res.is_ok());
+        assert!(tmpdir.path().join("diff-name/type").exists());
+        assert!(tmpdir.path().join("diff-name/key").exists());
+
+        let tmp: Vec<&str> = vec![];
+        let res = bp.delete_bindings(tmp.into_iter());
+        assert!(res.is_err());
+        assert!(tmpdir.path().join("diff-name/type").exists());
+        assert!(tmpdir.path().join("diff-name/key").exists());
+    }
+
+    #[test]
     fn given_binding_and_key_it_deletes_the_specific_binding_key_only() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let tmppath = tmpdir.path().to_string_lossy();
+
+        let bp = BindingProcessor::new(
+            &tmppath,
+            Some("some-type"),
+            Some("diff-name"),
+            BindingConfirmers::Always,
+        );
+        let res = bp.add_binding("key1=val1");
+        assert!(res.is_ok());
+
+        let res = bp.add_binding("key2=val2");
+        assert!(res.is_ok());
+
+        assert!(tmpdir.path().join("diff-name/type").exists());
+        assert!(tmpdir.path().join("diff-name/key1").exists());
+        assert!(tmpdir.path().join("diff-name/key2").exists());
+
+        let tmp: Vec<&str> = vec!["key1"];
+        let res = bp.delete_bindings(tmp.into_iter());
+        assert!(res.is_ok());
+        assert!(tmpdir.path().join("diff-name/type").exists());
+        assert!(!tmpdir.path().join("diff-name/key1").exists());
+        assert!(tmpdir.path().join("diff-name/key2").exists());
+    }
+
+    #[test]
+    fn given_binding_and_key_and_user_declines_it_doesnt_delete_the_specific_binding_key() {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
 
@@ -979,9 +1053,9 @@ mod tests {
 
         let tmp: Vec<&str> = vec!["key1"];
         let res = bp.delete_bindings(tmp.into_iter());
-        assert!(res.is_ok());
+        assert!(res.is_err());
         assert!(tmpdir.path().join("diff-name/type").exists());
-        assert!(!tmpdir.path().join("diff-name/key1").exists());
+        assert!(tmpdir.path().join("diff-name/key1").exists());
         assert!(tmpdir.path().join("diff-name/key2").exists());
     }
 
