@@ -1,5 +1,6 @@
 use anyhow::Result;
-use binding_tool::{Command, CommandHandler, Parser};
+use binding_tool::args::Parser;
+use binding_tool::{Command, CommandHandler};
 use std::env;
 use std::str::FromStr;
 
