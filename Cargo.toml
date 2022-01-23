@@ -16,3 +16,4 @@ features = ["std", "cargo"]
 [dev_dependencies]
 tempfile = "3"
 temp-env = "0.2"
+serial_test = "0.5"

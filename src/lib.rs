@@ -695,11 +695,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
     use std::str::Utf8Error;
 
     use super::*;
 
-    pub struct TestBuffer {
+    struct TestBuffer {
         buffer: Vec<u8>,
     }
 
@@ -728,6 +729,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(requires_cwd)]
     fn given_no_bindings_root_set_it_returns_current_working_directory() {
         let root = super::service_binding_root();
         assert!(root.starts_with(env::current_dir().unwrap().to_str().unwrap()));
@@ -867,6 +869,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(requires_cwd)]
     fn given_binding_args_with_value_relative_file_creates_binding_using_file_contents() {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
