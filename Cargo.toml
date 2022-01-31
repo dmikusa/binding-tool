@@ -7,11 +7,20 @@ description = "Generate Kubernetes service bindings for use with Cloud Native Bu
 
 [dependencies]
 anyhow = "1.0"
+toml = "0.5"
+url = "2.2"
+sha2 = "0.10"
+hex = "0.4"
 
 [dependencies.clap]
 version = "3.0"
 default-features = false
 features = ["std", "cargo"]
+
+[dependencies.ureq]
+version = "2.4"
+default-features = false
+features = ["tls", "native-certs", "cookies", "gzip", "brotli", "socks-proxy"]
 
 [dev_dependencies]
 tempfile = "3"

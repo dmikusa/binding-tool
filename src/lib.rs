@@ -1,4 +1,5 @@
 pub mod args;
+pub mod deps;
 
 use std::io::{prelude::*, stdin, Stdout};
 use std::{env, fs, path, str};
@@ -375,8 +376,56 @@ impl<'a> CommandHandler<'a> for CaCertsCommandHandler {
 pub struct DependencyMappingCommandHandler {}
 
 impl<'a> CommandHandler<'a> for DependencyMappingCommandHandler {
-    fn handle(&mut self, _args: Option<&ArgMatches>) -> Result<()> {
-        todo!()
+    fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()> {
+        // TODO: add support for id & version filters
+        ensure!(args.is_some(), "missing required args");
+        let args = args.unwrap();
+
+        let buildpack = args.value_of("BUILDPACK");
+        let toml_file = args.value_of("TOML");
+
+        let bindings_home = service_binding_root();
+        let binding_name = args.value_of("NAME").unwrap_or("dependency-mapping");
+        let confirmer = if args.is_present("FORCE") {
+            BindingConfirmers::Always
+        } else {
+            BindingConfirmers::Console
+        };
+
+        // process bindings
+        let btp = BindingProcessor::new(
+            &bindings_home,
+            Some("dependency-mapping"),
+            Some(binding_name),
+            confirmer,
+        );
+
+        let deps = if let Some(buildpack) = buildpack {
+            deps::parse_buildpack_toml_from_network(buildpack)
+        } else if let Some(toml_file) = toml_file {
+            deps::parse_buildpack_toml_from_disk(path::Path::new(toml_file))
+        } else {
+            Err(anyhow!("must have a buildpack.toml file"))
+        }?;
+
+        let binding_path = path::Path::new(&bindings_home).join(binding_name);
+        fs::create_dir_all(binding_path.join("binaries"))?;
+        deps::download_dependencies(deps.clone(), binding_path)?;
+
+        let deps_args: Vec<String> = deps
+            .iter()
+            .filter_map(|d| {
+                if let Ok(filename) = d.filename() {
+                    Some(format!(
+                        "{}=file:///bindings/{}/binaries/{}",
+                        d.sha256, binding_name, filename
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        btp.add_bindings(deps_args.iter().map(|s| &s[..]))
     }
 }
 
