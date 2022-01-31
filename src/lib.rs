@@ -461,12 +461,12 @@ where
         match (args.is_present("DOCKER"), args.is_present("PACK")) {
             (false, true) => write!(
                 self.output,
-                r#"--volume "{}:/binding" --env SERVICE_BINDING_ROOT=/bindings"#,
+                r#"--volume "{}:/bindings" --env SERVICE_BINDING_ROOT=/bindings"#,
                 bindings_root
             )?,
             (true, false) => write!(
                 self.output,
-                r#"--volume "{}:/binding" --env SERVICE_BINDING_ROOT=/bindings"#,
+                r#"--volume "{}:/bindings" --env SERVICE_BINDING_ROOT=/bindings"#,
                 bindings_root
             )?,
             _ => bail!("cannot have both docker and pack flags"),
@@ -850,7 +850,7 @@ mod tests {
             assert_eq!(
                 tb.string().unwrap(),
                 format!(
-                    r#"--volume "{}:/binding" --env SERVICE_BINDING_ROOT=/bindings"#,
+                    r#"--volume "{}:/bindings" --env SERVICE_BINDING_ROOT=/bindings"#,
                     tmppath
                 )
             );
