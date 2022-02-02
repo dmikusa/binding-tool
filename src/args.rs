@@ -288,3 +288,9 @@ impl<'a, 'b> Parser<'a> {
         }
     }
 }
+
+impl<'a, 'b> Default for Parser<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -21,15 +21,15 @@ impl Dependency {
     pub fn filename(&self) -> Result<String> {
         Url::parse(&self.uri)?
             .path_segments()
-            .ok_or(anyhow!("no path segments for {}", &self.uri))
+            .ok_or_else(|| anyhow!("no path segments for {}", &self.uri))
             .map(|s| {
                 s.last()
                     .map(|s| s.to_owned())
-                    .ok_or(anyhow!("no path for {}", &self.uri))
+                    .ok_or_else(|| anyhow!("no path for {}", &self.uri))
             })?
     }
 
-    pub fn checksum_matches(&self, binding_path: &path::PathBuf) -> Result<bool> {
+    pub fn checksum_matches(&self, binding_path: &path::Path) -> Result<bool> {
         let dest = binding_path.join("binaries").join(self.filename()?);
         if !dest.exists() {
             return Ok(false);
@@ -44,8 +44,8 @@ impl Dependency {
         Ok(hash == self.sha256)
     }
 
-    pub fn download(&self, agent: &ureq::Agent, binding_path: &path::PathBuf) -> Result<()> {
-        if self.checksum_matches(&binding_path)? {
+    pub fn download(&self, agent: &ureq::Agent, binding_path: &path::Path) -> Result<()> {
+        if self.checksum_matches(binding_path)? {
             return Ok(());
         }
 
@@ -88,7 +88,7 @@ pub fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<Dependen
 
 pub fn download_dependencies(deps: Vec<Dependency>, binding_path: path::PathBuf) -> Result<()> {
     let max_simult: usize = std::env::var("BT_MAX_SIMULTANEOUS")
-        .unwrap_or(String::from("5"))
+        .unwrap_or_else(|_| String::from("5"))
         .parse()?;
 
     let agent = Arc::new(configure_agent()?);
@@ -102,14 +102,16 @@ pub fn download_dependencies(deps: Vec<Dependency>, binding_path: path::PathBuf)
         let binding_path = Arc::clone(&binding_path);
         let deps = Arc::clone(&deps);
 
-        join_handles.push(thread::spawn(move || loop {
-            if let Some(d) = deps.lock().expect("unable to get lock").pop() {
+        join_handles.push(thread::spawn(move || {
+            while let Some(d) = deps.lock().expect("unable to get lock").pop() {
                 match d.download(&agent, &binding_path) {
                     Ok(_) => (),
-                    Err(err) => panic!("{}", err.to_string()),
+                    Err(err) => panic!(
+                        "Download of {} failed with error {}",
+                        d.uri,
+                        err.to_string()
+                    ),
                 }
-            } else {
-                break;
             }
         }))
     }
@@ -127,11 +129,11 @@ pub fn download_dependencies(deps: Vec<Dependency>, binding_path: path::PathBuf)
 
 fn configure_agent() -> Result<ureq::Agent> {
     let conn_timeout: u64 = std::env::var("BT_CONN_TIMEOUT")
-        .unwrap_or(String::from("5"))
+        .unwrap_or_else(|_| String::from("5"))
         .parse()?;
 
     let timeout: u64 = std::env::var("BT_REQ_TIMEOUT")
-        .unwrap_or(String::from("30"))
+        .unwrap_or_else(|_| String::from("30"))
         .parse()?;
 
     Ok(ureq::builder()
