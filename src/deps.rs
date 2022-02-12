@@ -6,19 +6,18 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::{path, thread};
 use toml::Value as Toml;
-use ureq;
 use url::Url;
 
 #[derive(Clone)]
-pub struct Dependency {
-    pub id: String,
-    pub sha256: String,
-    pub version: String,
-    pub uri: String,
+pub(super) struct Dependency {
+    pub(super) id: String,
+    pub(super) sha256: String,
+    pub(super) version: String,
+    pub(super) uri: String,
 }
 
 impl Dependency {
-    pub fn filename(&self) -> Result<String> {
+    pub(super) fn filename(&self) -> Result<String> {
         Url::parse(&self.uri)?
             .path_segments()
             .ok_or_else(|| anyhow!("no path segments for {}", &self.uri))
@@ -29,7 +28,7 @@ impl Dependency {
             })?
     }
 
-    pub fn checksum_matches(&self, binding_path: &path::Path) -> Result<bool> {
+    pub(super) fn checksum_matches(&self, binding_path: &path::Path) -> Result<bool> {
         let dest = binding_path.join("binaries").join(self.filename()?);
         if !dest.exists() {
             return Ok(false);
@@ -44,7 +43,7 @@ impl Dependency {
         Ok(hash == self.sha256)
     }
 
-    pub fn download(&self, agent: &ureq::Agent, binding_path: &path::Path) -> Result<()> {
+    pub(super) fn download(&self, agent: &ureq::Agent, binding_path: &path::Path) -> Result<()> {
         if self.checksum_matches(binding_path)? {
             return Ok(());
         }
@@ -59,7 +58,7 @@ impl Dependency {
     }
 }
 
-pub fn parse_buildpack_toml_from_disk(path: &path::Path) -> Result<Vec<Dependency>> {
+pub(super) fn parse_buildpack_toml_from_disk(path: &path::Path) -> Result<Vec<Dependency>> {
     let mut input = String::new();
 
     File::open(path)
@@ -69,7 +68,7 @@ pub fn parse_buildpack_toml_from_disk(path: &path::Path) -> Result<Vec<Dependenc
     transform(input.parse()?)
 }
 
-pub fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<Dependency>> {
+pub(super) fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<Dependency>> {
     let uri = format!(
         "https://raw.githubusercontent.com/{}/main/buildpack.toml",
         buildpack
@@ -86,7 +85,10 @@ pub fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<Dependen
     transform(res.parse()?)
 }
 
-pub fn download_dependencies(deps: Vec<Dependency>, binding_path: path::PathBuf) -> Result<()> {
+pub(super) fn download_dependencies(
+    deps: Vec<Dependency>,
+    binding_path: path::PathBuf,
+) -> Result<()> {
     let max_simult: usize = std::env::var("BT_MAX_SIMULTANEOUS")
         .unwrap_or_else(|_| String::from("5"))
         .parse()?;
