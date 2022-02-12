@@ -12,10 +12,11 @@ fn main() -> Result<()> {
 
     match Command::from_str(executed_command) {
         Ok(Command::Add(mut handler)) => handler.handle(args),
-        Ok(Command::Delete(mut handler)) => handler.handle(args),
-        Ok(Command::CaCerts(mut handler)) => handler.handle(args),
-        Ok(Command::DependencyMapping(mut handler)) => handler.handle(args),
         Ok(Command::Args(mut handler)) => handler.handle(args),
+        Ok(Command::CaCerts(mut handler)) => handler.handle(args),
+        Ok(Command::Delete(mut handler)) => handler.handle(args),
+        Ok(Command::DependencyMapping(mut handler)) => handler.handle(args),
+        Ok(Command::Init(mut handler)) => handler.handle(args),
         Err(err) => Err(err),
     }
 }

@@ -1,65 +1,65 @@
 # Binding Tool
 
-A tool for generating [Kubernetes service bindings](https://github.com/servicebinding/spec)for use with Cloud Native Buildpacks. The initial implementation focuses on creating bindings for use locally with `pack` and Docker (or similar tools). 
+A tool to make generating and consuming [Kubernetes service bindings](https://github.com/servicebinding/spec) easier to use with Cloud Native Buildpacks.
+
+The initial implementation focuses on creating bindings for use locally with `pack` and Docker (or similar tools).
 
 ## Usage
 
 ```
-> bt --help
-binding_tool 0.1.0
+binding_tool 0.6.0
 Daniel Mikusa <dmikusa@vmware.com>
-Generates bindings for use with Cloud Native Buildpacks
+Generate Kubernetes service bindings for use with Cloud Native Buildpacks
 
 USAGE:
-    bt [FLAGS] [OPTIONS] --param <key=val>... --type <type>
-
-FLAGS:
-    -f, --force      force update if key exists
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+    bt [SUBCOMMAND]
 
 OPTIONS:
-    -n, --name <name>           optional name for the binding, name defaults to the type
-    -p, --param <key=val>...    key/value to set for the type
-    -t, --type <type>           type of binding
+    -h, --help       Print help information
+    -V, --version    Print version information
 
-Param should be in the format key=value, where key is the
-name of the binding and value is the contents of the
-binding. If you wish to pull the contents of a binding
-from a file, you may do so by inserting an `@` symbol at
-the beginning of the contents and specifying a path. Full
-paths or relative paths from the current working directory
-are accepted.
-
-Ex:  `-p my_cert=@path/to/my_cert.pem`
-
-By default bindings will be generated under `./bindings`,
-however you may set `SERVICE_BINDING_ROOT` to change this
-location.
-
-All types and param key names must be valid file names.
+SUBCOMMANDS:
+    add                   Add or modify a binding
+    args                  Convenience that generates binding args for `pack build` and `docker
+                          run`
+    ca-certs              Convenience for adding `ca-certificates` bindings
+    delete                Delete a binding
+    dependency-mapping    Convenience for adding `dependency-mapping` bindings
+    help                  Print this message or the help of the given subcommand(s)
 ```
 
 ## Examples
 
-1. Create a `ca-certificates` binding: `bt -t 'ca-certificates' -p "VMware Root.pem=@$HOME/VMware Root.pem"`
-2. Add another certificate to the binding: `bt -t 'ca-certificates' -p "VMware Support Labs Root.pem=@$HOME/VMware Support Labs.pem"`
-3. Add a dependency mapping: `bt -t 'dependency-mapping' -p '23628d2945e54fc9c013a538d8902cfd371ff12ac57df390869e492002999418=file:///deps/bellsoft-jdk8u302+8-linux-amd64.tar.gz'`
-4. Add another dependency mapping: `bt -t 'dependency-mapping' -p '43400304ef7ca9934b9c208df3c07f958b17ad5a9bbf5d59c73809a6cb2cadee=file:///deps/bellsoft-jre8u302+8-linux-amd64.tar.gz'`
+### Creating Dependency Mapping Bindings
 
-This results in:
+1. Create dependency mappings and download dependencies for all dependencies in a buildpack: `bt dependency-mapping -b paketo-buildpacks/bellsoft-liberica`
+2. Run again with a second buildpack. It'll update the dependency mappings and download dependencies. You can even use `dm` for short. `bt dm -b paketo-buildpacks/apache-tomcat`.
+3. If you have the `buildpack.toml` file locally, you can `bt dm -t path/to/buildpack.toml` and it will download all dependencies from that file and create dependency mappings for them.
 
-```
-> tree bindings/
-bindings/
-├── ca-certificates
-│   ├── VMware\ Root.pem
-│   ├── VMware\ Support\ Labs\ Root.pem
-│   └── type
-└── dependency-mapping
-    ├── 23628d2945e54fc9c013a538d8902cfd371ff12ac57df390869e492002999418
-    ├── 43400304ef7ca9934b9c208df3c07f958b17ad5a9bbf5d59c73809a6cb2cadee
-    └── type
+### Creating CA Certificate Bindings
 
-2 directories, 6 files
-```
+1. Create a ca-certificate binding: `bt ca-certs -c "VMware Root.pem=@$HOME/VMware Root.pem"`.
+2. Add another certificate binding this time using the short cut: `bt cc -c -p "VMware Support Labs Root.pem=@$HOME/VMware Support Labs.pem"`.
+
+### Add any type of Binding
+
+1. Create a `ca-certificates` binding manually: `bt add -t 'ca-certificates' -p "VMware Root.pem=@$HOME/VMware Root.pem"`
+2. Add a dependency mapping manually: `bt add -t 'dependency-mapping' -p '23628d2945e54fc9c013a538d8902cfd371ff12ac57df390869e492002999418=file:///deps/bellsoft-jdk8u302+8-linux-amd64.tar.gz'`
+3. Add a random type, you can also add multiple binding entries by repeating the `-p` argument: `bt add -t some-type -p key1=value1 -p key2=val2 -p key3=val3`.
+4. You can delete bindings manually, just remove the files. You can also `bt delete -n ca-certificates`, which would delete all the binding entries under the ca-certificates binding. To delete a specific binding entry, `bt delete -n ca-certificates -k "VMware Root.pem"`.
+
+### Consuming Bindings
+
+Creating the bindings is only one-half of the fun. The other half is consuming them at build and launch time. The `bt` tool has the `bt init <shell>` command to make this easier.
+
+Add `eval "$(bt init bash)"` to `~/.bashrc` for Bash, or add `eval (bt init fish)` to `~/.config/fish/config.fish` for Fish. Then reload your shell.
+
+This will add two wrapper functions to your shell. They wrap the `docker` and `pack` commands. If a `docker run` or `pack build` are executed, then the script will append the additional arguments required for your bindings to the command. If any other subcommand of `docker` or `pack` are executed, all args are passed through unchanged.
+
+## Binding Storage
+
+By default, the `bt` tool will expect bindings to exist `$PWD/bindings`. This generally works well as you'll be running `pack build` and `docker run` from the root of your project directory. Your bindings are stored with each project.
+
+If you are using dependency mappings or CA certificates that you might want to share across multiple projects, you can set a value for `SERVICE_BINDING_ROOT` that points to a shared location. Then `bt` will generate args to this shared location.
+
+For example: `SERVICE_BINDING_ROOT=~/.bt/bindings`. This will store bindings in a shared folder.
