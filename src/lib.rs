@@ -255,7 +255,7 @@ pub enum Command {
     Delete(DeleteCommandHandler),
     CaCerts(CaCertsCommandHandler),
     DependencyMapping(DependencyMappingCommandHandler),
-    Args(ArgsCommandHandler<Stdout>),
+    Args(InitCommandHandler<Stdout>),
 }
 
 impl str::FromStr for Command {
@@ -269,7 +269,7 @@ impl str::FromStr for Command {
             "dependency-mapping" => Ok(Command::DependencyMapping(
                 DependencyMappingCommandHandler {},
             )),
-            "args" => Ok(Command::Args(ArgsCommandHandler {
+            "init" => Ok(Command::Args(InitCommandHandler {
                 output: std::io::stdout(),
             })),
             _ => bail!("could not part argument"),
@@ -429,11 +429,11 @@ impl<'a> CommandHandler<'a> for DependencyMappingCommandHandler {
     }
 }
 
-pub struct ArgsCommandHandler<T> {
+pub struct InitCommandHandler<T> {
     output: T,
 }
 
-impl<'a, T> CommandHandler<'a> for ArgsCommandHandler<T>
+impl<'a, T> CommandHandler<'a> for InitCommandHandler<T>
 where
     T: Write,
 {
@@ -443,36 +443,26 @@ where
 
         // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
         let bindings_root = service_binding_root();
-        let bindings_home = path::Path::new(&bindings_root);
 
-        if !bindings_home.exists() {
-            return Ok(());
-        }
-
-        let binding_count = bindings_home
-            .read_dir()?
-            .filter_map(|res| res.ok())
-            .filter(|entry| entry.path().is_dir() && entry.path().join("type").exists())
-            .count();
-        if binding_count == 0 {
-            return Ok(());
-        }
-
-        match (args.is_present("DOCKER"), args.is_present("PACK")) {
-            (false, true) => write!(
-                self.output,
-                r#"--volume {}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#,
-                bindings_root
-            )?,
-            (true, false) => write!(
-                self.output,
-                r#"--volume {}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#,
-                bindings_root
-            )?,
-            _ => bail!("cannot have both docker and pack flags"),
+        let shell = args.value_of("SHELL").unwrap(); // required, should not fail
+        let template = match shell {
+            "fish" => include_str!("scripts/fish.sh"),
+            "bash" => include_str!("scripts/bash.sh"),
+            _ => bail!("unsupported shell {}", shell),
         };
 
-        Ok(())
+        writeln!(
+            self.output,
+            "{}",
+            template.replace(
+                "###REPLACE###",
+                &format!(
+                    r#"--volume {}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#,
+                    bindings_root
+                )
+            )
+        )
+        .map_err(|e| anyhow!(e))
     }
 }
 
@@ -822,36 +812,56 @@ mod tests {
     }
 
     #[test]
-    fn given_a_binding_args_outputs() {
+    fn given_a_binding_init_outputs_fish_script() {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmppath = tmpdir.path().to_string_lossy();
 
         temp_env::with_var("SERVICE_BINDING_ROOT", Some(tmpdir.as_ref()), || {
-            // make some bindings, required
-
-            let bp = BindingProcessor::new(
-                &tmppath,
-                Some("some-type"),
-                Some("diff-name"),
-                BindingConfirmers::Never,
-            );
-            let res = bp.add_binding("key1=val1");
-            assert!(res.is_ok());
-
             // check args
-            let args = args::Parser::new().parse_args(vec!["bt", "args", "--docker"]);
-            let cmd = args.subcommand_matches("args").unwrap();
+            let args = args::Parser::new().parse_args(vec!["bt", "init", "fish"]);
+            let cmd = args.subcommand_matches("init").unwrap();
             let mut tb = TestBuffer::new();
-            let res = ArgsCommandHandler {
+            let res = InitCommandHandler {
                 output: tb.writer(),
             }
             .handle(Some(cmd));
-            assert!(res.is_ok(), "args handler should succeed");
+            assert!(res.is_ok(), "init handler should succeed");
             assert_eq!(
-                tb.string().unwrap(),
-                format!(
-                    r#"--volume {}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#,
-                    tmppath
+                tb.string().unwrap().trim_end(),
+                include_str!("scripts/fish.sh").replace(
+                    "###REPLACE###",
+                    &format!(
+                        r#"--volume {}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#,
+                        tmppath
+                    )
+                )
+            );
+        });
+    }
+
+    #[test]
+    fn given_a_binding_init_outputs_bash_script() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let tmppath = tmpdir.path().to_string_lossy();
+
+        temp_env::with_var("SERVICE_BINDING_ROOT", Some(tmpdir.as_ref()), || {
+            // check args
+            let args = args::Parser::new().parse_args(vec!["bt", "init", "bash"]);
+            let cmd = args.subcommand_matches("init").unwrap();
+            let mut tb = TestBuffer::new();
+            let res = InitCommandHandler {
+                output: tb.writer(),
+            }
+            .handle(Some(cmd));
+            assert!(res.is_ok(), "init handler should succeed");
+            assert_eq!(
+                tb.string().unwrap().trim_end(),
+                include_str!("scripts/bash.sh").replace(
+                    "###REPLACE###",
+                    &format!(
+                        r#"--volume {}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#,
+                        tmppath
+                    )
                 )
             );
         });

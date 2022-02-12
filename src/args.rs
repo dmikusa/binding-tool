@@ -1,4 +1,4 @@
-use clap::{app_from_crate, App, Arg, ArgGroup};
+use clap::{app_from_crate, App, Arg};
 use std::ffi::OsString;
 
 pub struct Parser<'a> {
@@ -92,30 +92,19 @@ impl<'a, 'b> Parser<'a> {
     /// assert_eq!(bps, vec!["buildpack/id-1:v1.0.1", "buildpack/id-2:v2.1.0"]);
     /// ```
     ///
-    /// Convenience: add arguments for docker run
+    /// Convenience: configure bash
     ///
     /// ```
-    /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "args", "-d"]);
-    /// let cmd = args.subcommand_matches("args").unwrap();
+    /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "init", "bash"]);
+    /// let cmd = args.subcommand_matches("init").unwrap();
     ///
-    /// assert_eq!(cmd.is_present("DOCKER"), true);
-    /// assert_eq!(cmd.is_present("PACK"), false);
-    /// ```
-    ///
-    /// Convenience: add arguments for pack build
-    ///
-    /// ```
-    /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "args", "-p"]);
-    /// let cmd = args.subcommand_matches("args").unwrap();
-    ///
-    /// assert_eq!(cmd.is_present("DOCKER"), false);
-    /// assert_eq!(cmd.is_present("PACK"), true);
+    /// assert_eq!(cmd.value_of("SHELL").unwrap(), "bash");
     /// ```
     ///
     /// Convenience: don't set the type of args and fails
     ///
     /// ```
-    /// let res = binding_tool::args::Parser::new().try_parse_args(vec!["bt", "args"]);
+    /// let res = binding_tool::args::Parser::new().try_parse_args(vec!["bt", "init"]);
     /// assert!(res.is_err(), "should require a argument");
     /// ```
     ///
@@ -258,32 +247,16 @@ impl<'a, 'b> Parser<'a> {
                     .after_help(include_str!("help/additional_help_binding.txt")),
             )
             .subcommand(
-                App::new("args")
+                App::new("init")
                     .arg(
-                        Arg::new("DOCKER")
-                            .short('d')
-                            .long("docker")
-                            .takes_value(false)
-                            .conflicts_with("PACK")
-                            .help("generates binding args for `docker run`"),
-                    )
-                    .arg(
-                        Arg::new("PACK")
-                            .short('p')
-                            .long("pack")
-                            .takes_value(false)
-                            .conflicts_with("DOCKER")
-                            .help("generates binding args for `pack build`"),
-                    )
-                    .group(
-                        ArgGroup::new("TYPES")
-                            .args(&["DOCKER", "PACK"])
+                        Arg::new("SHELL")
+                            .value_name("shell")
                             .required(true)
-                    )
+                            .possible_values(["bash", "fish"])
+                            .help("type of shell script to generate"))
                     .about(
-                        "Convenience that generates binding args for `pack build` and `docker run`",
-                    )
-                    .after_help(include_str!("help/additional_help_binding.txt")),
+                        "Generates shell wrappers that make using `pack build` and `docker run` easier",
+                    ),
             )
         }
     }
