@@ -1,0 +1,3 @@
+By default bindings will be generated under `./bindings`,
+however you may set `SERVICE_BINDING_ROOT` to change this
+location.
