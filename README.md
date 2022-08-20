@@ -63,3 +63,9 @@ By default, the `bt` tool will expect bindings to exist `$PWD/bindings`. This ge
 If you are using dependency mappings or CA certificates that you might want to share across multiple projects, you can set a value for `SERVICE_BINDING_ROOT` that points to a shared location. Then `bt` will generate args to this shared location.
 
 For example: `SERVICE_BINDING_ROOT=~/.bt/bindings`. This will store bindings in a shared folder.
+
+## License
+
+This project is released under version 2.0 of the [Apache License][a].
+
+[a]: http://www.apache.org/licenses/LICENSE-2.0
