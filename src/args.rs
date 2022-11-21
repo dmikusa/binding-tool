@@ -318,7 +318,7 @@ impl Parser {
                     )
                     .group(
                         ArgGroup::new("TYPES")
-                            .args(&["DOCKER", "PACK"])
+                            .args(["DOCKER", "PACK"])
                             .multiple(false)
                             .required(true)
                     )
@@ -331,7 +331,7 @@ impl Parser {
     }
 }
 
-impl<'a> Default for Parser {
+impl Default for Parser {
     fn default() -> Self {
         Self::new()
     }
