@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{app_from_crate, App, Arg, ArgGroup};
+use clap::{command, Arg, ArgAction, ArgGroup, Command};
 use std::ffi::OsString;
 
-pub struct Parser<'a> {
-    app: clap::App<'a>,
+pub struct Parser {
+    app: Command,
 }
 
-impl<'a> Parser<'a> {
+impl Parser {
     /// Parse application arguments
     ///
     /// ### Examples
@@ -30,11 +30,11 @@ impl<'a> Parser<'a> {
     /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "add", "-t", "binding", "-p", "foo=bar"]);
     /// let cmd = args.subcommand_matches("add").unwrap();
     ///
-    /// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
+    /// assert_eq!(cmd.get_one::<String>("TYPE").unwrap(), "binding");
     ///
-    /// let params:Vec<_> = cmd.values_of("PARAM").unwrap().collect();
+    /// let params:Vec<_> = cmd.get_many::<String>("PARAM").unwrap().collect();
     /// assert_eq!(params, vec!["foo=bar"]);
-    /// assert_eq!(cmd.value_of("NAME"), None);
+    /// assert_eq!(cmd.get_one::<String>("NAME"), None);
     /// ```
     ///
     /// More Advanced: Add with multiple parameters and a name
@@ -43,12 +43,12 @@ impl<'a> Parser<'a> {
     /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "add", "-f", "-n", "better_name", "-t", "binding", "-p", "foo=bar", "-p", "gorilla=banana"]);
     /// let cmd = args.subcommand_matches("add").unwrap();
     ///
-    /// assert_eq!(cmd.value_of("TYPE").unwrap(), "binding");
+    /// assert_eq!(cmd.get_one::<String>("TYPE").unwrap(), "binding");
     ///
-    /// let params:Vec<_> = cmd.values_of("PARAM").unwrap().collect();
+    /// let params:Vec<_> = cmd.get_many::<String>("PARAM").unwrap().collect();
     /// assert_eq!(params, vec!["foo=bar", "gorilla=banana"]);
-    /// assert_eq!(cmd.value_of("NAME").unwrap(), "better_name");
-    /// assert_eq!(cmd.is_present("FORCE"), true);
+    /// assert_eq!(cmd.get_one::<String>("NAME").unwrap(), "better_name");
+    /// assert_eq!(cmd.contains_id("FORCE"), true);
     /// ```
     ///
     /// Basic: Delete an entire binding
@@ -57,7 +57,7 @@ impl<'a> Parser<'a> {
     /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "delete", "-n", "binding"]);
     /// let cmd = args.subcommand_matches("delete").unwrap();
     ///
-    /// assert_eq!(cmd.value_of("NAME").unwrap(), "binding");
+    /// assert_eq!(cmd.get_one::<String>("NAME").unwrap(), "binding");
     /// ```
     ///
     /// More Advanced: Delete parts of a binding
@@ -66,10 +66,10 @@ impl<'a> Parser<'a> {
     /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "delete", "-f", "-n", "better_name", "-k", "foo"]);
     /// let cmd = args.subcommand_matches("delete").unwrap();
     ///
-    /// let keys:Vec<_> = cmd.values_of("KEY").unwrap().collect();
+    /// let keys:Vec<_> = cmd.get_many::<String>("KEY").unwrap().collect();
     /// assert_eq!(keys, vec!["foo"]);
-    /// assert_eq!(cmd.value_of("NAME").unwrap(), "better_name");
-    /// assert_eq!(cmd.is_present("FORCE"), true);
+    /// assert_eq!(cmd.get_one::<String>("NAME").unwrap(), "better_name");
+    /// assert_eq!(cmd.contains_id("FORCE"), true);
     /// ```
     ///
     /// Convenience: add ca-certificates
@@ -79,10 +79,10 @@ impl<'a> Parser<'a> {
     /// let cmd = args.subcommand_matches("ca-certs").unwrap();
     ///
     ///
-    /// let certs:Vec<_> = cmd.values_of("CERT").unwrap().collect();
+    /// let certs:Vec<_> = cmd.get_many::<String>("CERT").unwrap().collect();
     /// assert_eq!(certs, vec!["/path/to/ca.crt"]);
-    /// assert_eq!(cmd.value_of("NAME").unwrap(), "my-certs");
-    /// assert_eq!(cmd.is_present("FORCE"), true);
+    /// assert_eq!(cmd.get_one::<String>("NAME").unwrap(), "my-certs");
+    /// assert_eq!(cmd.contains_id("FORCE"), true);
     /// ```
     ///
     /// Convenience: add dependency-mappings
@@ -91,9 +91,9 @@ impl<'a> Parser<'a> {
     /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "dependency-mapping", "-n", "my-deps", "-t", "/path/to/file.zip"]);
     /// let cmd = args.subcommand_matches("dependency-mapping").unwrap();
     ///
-    /// let files:Vec<_> = cmd.values_of("TOML").unwrap().collect();
+    /// let files:Vec<_> = cmd.get_many::<String>("TOML").unwrap().collect();
     /// assert_eq!(files, vec!["/path/to/file.zip"]);
-    /// assert_eq!(cmd.value_of("NAME").unwrap(), "my-deps");
+    /// assert_eq!(cmd.get_one::<String>("NAME").unwrap(), "my-deps");
     /// ```
     ///
     /// Convenience: add dependency-mappings from buildpack
@@ -102,7 +102,7 @@ impl<'a> Parser<'a> {
     /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "dependency-mapping", "-b", "buildpack/id-1:v1.0.1", "-b", "buildpack/id-2:v2.1.0"]);
     /// let cmd = args.subcommand_matches("dependency-mapping").unwrap();
     ///
-    /// let bps:Vec<_> = cmd.values_of("BUILDPACK").unwrap().collect();
+    /// let bps:Vec<_> = cmd.get_many::<String>("BUILDPACK").unwrap().collect();
     /// assert_eq!(bps, vec!["buildpack/id-1:v1.0.1", "buildpack/id-2:v2.1.0"]);
     /// ```
     ///
@@ -112,7 +112,7 @@ impl<'a> Parser<'a> {
     /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "init", "bash"]);
     /// let cmd = args.subcommand_matches("init").unwrap();
     ///
-    /// assert_eq!(cmd.value_of("SHELL").unwrap(), "bash");
+    /// assert_eq!(cmd.get_one::<String>("SHELL").unwrap(), "bash");
     /// ```
     ///
     /// Convenience: don't set the type of args and fails
@@ -129,8 +129,8 @@ impl<'a> Parser<'a> {
     /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "args", "-d"]);
     /// let cmd = args.subcommand_matches("args").unwrap();
     ///
-    /// assert_eq!(cmd.is_present("DOCKER"), true);
-    /// assert_eq!(cmd.is_present("PACK"), false);
+    /// assert_eq!(cmd.value_source("DOCKER"), Some(clap::parser::ValueSource::CommandLine));
+    /// assert_eq!(cmd.value_source("PACK"), Some(clap::parser::ValueSource::DefaultValue));
     /// ```
     ///
     /// Convenience: add arguments for pack build
@@ -139,8 +139,8 @@ impl<'a> Parser<'a> {
     /// let args = binding_tool::args::Parser::new().parse_args(vec!["bt", "args", "-p"]);
     /// let cmd = args.subcommand_matches("args").unwrap();
     ///
-    /// assert_eq!(cmd.is_present("DOCKER"), false);
-    /// assert_eq!(cmd.is_present("PACK"), true);
+    /// assert_eq!(cmd.value_source("DOCKER"), Some(clap::parser::ValueSource::DefaultValue));
+    /// assert_eq!(cmd.value_source("PACK"), Some(clap::parser::ValueSource::CommandLine));
     /// ```
     ///
     /// Convenience: don't set the type of args and fails
@@ -158,7 +158,7 @@ impl<'a> Parser<'a> {
         self.app.get_matches_from(args)
     }
 
-    pub fn try_parse_args<I, T>(self, args: I) -> clap::Result<clap::ArgMatches>
+    pub fn try_parse_args<I, T>(self, args: I) -> clap::error::Result<clap::ArgMatches>
     where
         I: IntoIterator<Item = T>,
         T: Into<OsString> + Clone,
@@ -166,17 +166,17 @@ impl<'a> Parser<'a> {
         self.app.try_get_matches_from(args)
     }
 
-    pub fn new() -> Parser<'a> {
+    pub fn new() -> Parser {
         let force = Arg::new("FORCE")
             .short('f')
             .long("force")
-            .takes_value(false)
+            .action(ArgAction::SetTrue)
             .help("force update if key exists");
 
         Parser {
-            app: app_from_crate!()
+            app: command!()
             .subcommand(
-                App::new("add")
+                Command::new("add")
                     .alias("a")
                     .arg(&force)
                     .arg(
@@ -200,7 +200,7 @@ impl<'a> Parser<'a> {
                             .short('p')
                             .long("param")
                             .value_name("key=val")
-                            .multiple_occurrences(true)
+                            .action(ArgAction::Append)
                             .required(true)
                             .help("key/value to set for the type"),
                     )
@@ -208,7 +208,7 @@ impl<'a> Parser<'a> {
                     .after_help( include_str!("help/additional_help_param.txt")),
             )
             .subcommand(
-                App::new("delete")
+                Command::new("delete")
                     .alias("d")
                     .arg(&force)
                     .arg(
@@ -224,7 +224,7 @@ impl<'a> Parser<'a> {
                             .short('k')
                             .long("key")
                             .value_name("key")
-                            .multiple_occurrences(true)
+                            .action(ArgAction::Append)
                             .required(false)
                             .help("specific key to delete"),
                     )
@@ -232,7 +232,7 @@ impl<'a> Parser<'a> {
                     .after_help(include_str!("help/additional_help_binding.txt")),
             )
             .subcommand(
-                App::new("ca-certs")
+                Command::new("ca-certs")
                     .alias("cc")
                     .arg(&force)
                     .arg(
@@ -249,14 +249,14 @@ impl<'a> Parser<'a> {
                             .long("cert")
                             .value_name("cert")
                             .required(true)
-                            .multiple_occurrences(true)
+                            .action(ArgAction::Append)
                             .help("path to a CA certificate to add"),
                     )
                     .about("Convenience for adding `ca-certificates` bindings")
                     .after_help(include_str!("help/additional_help_binding.txt")),
             )
             .subcommand(
-                App::new("dependency-mapping")
+                Command::new("dependency-mapping")
                     .alias("dm")
                     .arg(&force)
                     .arg(
@@ -272,7 +272,7 @@ impl<'a> Parser<'a> {
                             .short('t')
                             .long("toml")
                             .value_name("toml")
-                            .multiple_occurrences(true)
+                            .action(ArgAction::Append)
                             .conflicts_with("BUILDPACK")
                             .help("path to local buildpack.toml file with metadata dependencies"),
                     )
@@ -281,7 +281,7 @@ impl<'a> Parser<'a> {
                             .short('b')
                             .long("buildpack")
                             .value_name("buildpack")
-                            .multiple_occurrences(true)
+                            .action(ArgAction::Append)
                             .conflicts_with("TOML")
                             .help("buildpack ID from which dependencies will be loaded"),
                     )
@@ -289,38 +289,37 @@ impl<'a> Parser<'a> {
                     .after_help(include_str!("help/additional_help_binding.txt")),
             )
             .subcommand(
-                App::new("init")
+                Command::new("init")
                     .arg(
                         Arg::new("SHELL")
                             .value_name("shell")
                             .required(true)
-                            .possible_values(["bash", "fish"])
+                            .value_parser(["bash", "fish"])
                             .help("type of shell script to generate"))
                     .about(
                         "Generates shell wrappers that make using `pack build` and `docker run` easier",
                     ),
             )
             .subcommand(
-                App::new("args")
+                Command::new("args")
                     .arg(
                         Arg::new("DOCKER")
                             .short('d')
                             .long("docker")
-                            .takes_value(false)
-                            .conflicts_with("PACK")
+                            .action(ArgAction::SetTrue)
                             .help("generates binding args for `docker run`"),
                     )
                     .arg(
                         Arg::new("PACK")
                             .short('p')
                             .long("pack")
-                            .takes_value(false)
-                            .conflicts_with("DOCKER")
+                            .action(ArgAction::SetTrue)
                             .help("generates binding args for `pack build`"),
                     )
                     .group(
                         ArgGroup::new("TYPES")
                             .args(&["DOCKER", "PACK"])
+                            .multiple(false)
                             .required(true)
                     )
                     .about(
@@ -332,7 +331,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-impl<'a> Default for Parser<'a> {
+impl<'a> Default for Parser {
     fn default() -> Self {
         Self::new()
     }

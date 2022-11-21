@@ -17,6 +17,7 @@ use std::str::FromStr;
 use std::{env, fs, path, str};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
+use clap::parser::ValueSource;
 use clap::ArgMatches;
 
 use crate::{args, deps};
@@ -323,17 +324,17 @@ impl<'a> CommandHandler<'a> for AddCommandHandler {
         ensure!(args.is_some(), "missing required args");
         let args = args.unwrap();
 
-        let binding_key_vals = args.values_of("PARAM");
+        let binding_key_vals = args.get_many::<String>("PARAM");
         ensure!(
             binding_key_vals.is_some(),
             "binding parameter (key=val) is required"
         );
 
-        let binding_type = args.value_of("TYPE");
-        let binding_name = args.value_of("NAME");
+        let binding_type = args.get_one::<String>("TYPE").map(|s| s.as_str());
+        let binding_name = args.get_one::<String>("NAME").map(|s| s.as_str());
         let bindings_home = service_binding_root();
 
-        let confirmer = if args.is_present("FORCE") {
+        let confirmer = if args.contains_id("FORCE") {
             BindingConfirmers::Always
         } else {
             BindingConfirmers::Console
@@ -341,7 +342,7 @@ impl<'a> CommandHandler<'a> for AddCommandHandler {
 
         // process bindings
         let btp = BindingProcessor::new(&bindings_home, binding_type, binding_name, confirmer);
-        btp.add_bindings(binding_key_vals.unwrap())
+        btp.add_bindings(binding_key_vals.unwrap().into_iter().map(|s| s.as_str()))
     }
 }
 
@@ -353,16 +354,16 @@ impl<'a> CommandHandler<'a> for DeleteCommandHandler {
         let args = args.unwrap();
 
         // required (it's OK to unwrap)
-        let binding_name = args.value_of("NAME");
+        let binding_name = args.get_one::<String>("NAME").map(|s| s.as_str());
         ensure!(binding_name.is_some(), "binding name is required");
 
         // not required, but OK to use default (empty iterator)
-        let binding_key_vals = args.values_of("KEY").unwrap_or_default();
+        let binding_key_vals = args.get_many::<String>("KEY").unwrap_or_default();
 
         // binding root = SERVICE_BINDING_ROOT (or default to "./bindings")
         let bindings_home = service_binding_root();
 
-        let confirmer = if args.is_present("FORCE") {
+        let confirmer = if args.contains_id("FORCE") {
             BindingConfirmers::Never
         } else {
             BindingConfirmers::Console
@@ -370,7 +371,7 @@ impl<'a> CommandHandler<'a> for DeleteCommandHandler {
 
         // process bindings
         let btp = BindingProcessor::new(&bindings_home, None, binding_name, confirmer);
-        btp.delete_bindings(binding_key_vals)
+        btp.delete_bindings(binding_key_vals.into_iter().map(|s| s.as_str()))
     }
 }
 
@@ -382,10 +383,13 @@ impl<'a> CommandHandler<'a> for CaCertsCommandHandler {
         let args = args.unwrap();
 
         let bindings_home = service_binding_root();
-        let binding_name = args.value_of("NAME").unwrap_or("ca-certificates");
-        let certs = args.values_of("CERT");
+        let binding_name = args
+            .get_one::<String>("NAME")
+            .map(|s| s.as_str())
+            .unwrap_or("ca-certificates");
+        let certs = args.get_many::<String>("CERT");
 
-        let confirmer = if args.is_present("FORCE") {
+        let confirmer = if args.contains_id("FORCE") {
             BindingConfirmers::Always
         } else {
             BindingConfirmers::Console
@@ -420,12 +424,15 @@ impl<'a> CommandHandler<'a> for DependencyMappingCommandHandler {
         ensure!(args.is_some(), "missing required args");
         let args = args.unwrap();
 
-        let buildpack = args.value_of("BUILDPACK");
-        let toml_file = args.value_of("TOML");
+        let buildpack = args.get_one::<String>("BUILDPACK");
+        let toml_file = args.get_one::<String>("TOML");
 
         let bindings_home = service_binding_root();
-        let binding_name = args.value_of("NAME").unwrap_or("dependency-mapping");
-        let confirmer = if args.is_present("FORCE") {
+        let binding_name = args
+            .get_one::<String>("NAME")
+            .map(|s| s.as_str())
+            .unwrap_or("dependency-mapping");
+        let confirmer = if args.contains_id("FORCE") {
             BindingConfirmers::Always
         } else {
             BindingConfirmers::Console
@@ -497,17 +504,18 @@ where
             return Ok(());
         }
 
-        match (args.is_present("DOCKER"), args.is_present("PACK")) {
-            (false, true) => write!(
+        match (args.value_source("DOCKER"), args.value_source("PACK")) {
+            (Some(ValueSource::DefaultValue), Some(ValueSource::CommandLine)) => write!(
                 self.output,
                 r#"--volume {}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#,
                 bindings_root
             )?,
-            (true, false) => write!(
+            (Some(ValueSource::CommandLine), Some(ValueSource::DefaultValue)) => write!(
                 self.output,
                 r#"--volume {}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#,
                 bindings_root
             )?,
+            // should never happen
             _ => bail!("cannot have both docker and pack flags"),
         };
 
@@ -527,7 +535,7 @@ where
         ensure!(args.is_some(), "missing required args");
         let args = args.unwrap();
 
-        let shell = args.value_of("SHELL").unwrap(); // required, should not fail
+        let shell = args.get_one::<String>("SHELL").map(|s| s.as_str()).unwrap(); // required, should not fail
 
         writeln!(
             self.output,
@@ -948,6 +956,7 @@ mod tests {
                 output: tb.writer(),
             }
             .handle(Some(cmd));
+            dbg!(&res);
             assert!(res.is_ok(), "args handler should succeed");
             assert_eq!(
                 tb.string().unwrap(),
