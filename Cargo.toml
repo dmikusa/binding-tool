@@ -14,7 +14,7 @@
 
 [package]
 name = "binding_tool"
-version = "1.10.0"
+version = "1.11.0"
 edition = "2018"
 authors = ["Daniel Mikusa <dmikusa@vmware.com>"]
 description = "Generate Kubernetes service bindings for use with Cloud Native Buildpacks"
