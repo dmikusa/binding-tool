@@ -26,7 +26,7 @@ categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 anyhow = "1.0"
-toml = "0.5"
+toml = "0.7"
 url = "2.2"
 sha2 = "0.10"
 hex = "0.4"
