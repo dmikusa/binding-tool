@@ -80,7 +80,7 @@ struct ConsoleBindingConfirmer {}
 
 impl BindingConfirmer for ConsoleBindingConfirmer {
     fn confirm(&self, msg: &str) -> bool {
-        println!("{} (yes or no)", msg);
+        println!("{msg} (yes or no)");
 
         let mut input: String = String::new();
         let res = stdin().lock().read_line(&mut input);
@@ -254,7 +254,7 @@ where
         let src = self.value.trim_start_matches('@');
         let src_path = path::Path::new(src)
             .canonicalize()
-            .with_context(|| format!("cannot canonicalize path to source file: {}", src))?;
+            .with_context(|| format!("cannot canonicalize path to source file: {src}"))?;
         fs::copy(&src_path, self.binding_key_path()).with_context(|| {
             format!(
                 "failed to copy {} to {}",
@@ -408,7 +408,7 @@ impl<'a> CommandHandler<'a> for CaCertsCommandHandler {
             .enumerate()
             .map(|(i, c)| match path::Path::new(c).file_name() {
                 Some(file_name) => format!("{}=@{}", file_name.to_string_lossy(), c),
-                None => format!("cert-{}=@{}", i, c),
+                None => format!("cert-{i}=@{c}"),
             })
             .collect();
 
@@ -507,13 +507,11 @@ where
         match (args.value_source("DOCKER"), args.value_source("PACK")) {
             (Some(ValueSource::DefaultValue), Some(ValueSource::CommandLine)) => write!(
                 self.output,
-                r#"--volume {}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#,
-                bindings_root
+                r#"--volume {bindings_root}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#
             )?,
             (Some(ValueSource::CommandLine), Some(ValueSource::DefaultValue)) => write!(
                 self.output,
-                r#"--volume {}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#,
-                bindings_root
+                r#"--volume {bindings_root}:/bindings --env SERVICE_BINDING_ROOT=/bindings"#
             )?,
             // should never happen
             _ => bail!("cannot have both docker and pack flags"),

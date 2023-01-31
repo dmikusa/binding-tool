@@ -46,7 +46,7 @@ impl Dependency {
             return Ok(false);
         }
 
-        let mut fp = File::open(&dest).with_context(|| format!("cannot open file {:?}", dest))?;
+        let mut fp = File::open(&dest).with_context(|| format!("cannot open file {dest:?}"))?;
 
         let mut hasher = Sha256::new();
         io::copy(&mut fp, &mut hasher)?;
@@ -61,7 +61,7 @@ impl Dependency {
         }
 
         let dest = binding_path.join("binaries").join(self.filename()?);
-        let mut fp = File::create(&dest).with_context(|| format!("cannot open file {:?}", dest))?;
+        let mut fp = File::create(&dest).with_context(|| format!("cannot open file {dest:?}"))?;
 
         let mut reader = agent.get(&self.uri).call()?.into_reader();
 
@@ -81,18 +81,15 @@ pub(super) fn parse_buildpack_toml_from_disk(path: &path::Path) -> Result<Vec<De
 }
 
 pub(super) fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<Dependency>> {
-    let uri = format!(
-        "https://raw.githubusercontent.com/{}/main/buildpack.toml",
-        buildpack
-    );
+    let uri = format!("https://raw.githubusercontent.com/{buildpack}/main/buildpack.toml");
 
     let agent = configure_agent()?;
     let res = agent
         .get(&uri)
         .call()
-        .with_context(|| format!("failed on url {}", uri))?
+        .with_context(|| format!("failed on url {uri}"))?
         .into_string()
-        .with_context(|| format!("failed on url {}", uri))?;
+        .with_context(|| format!("failed on url {uri}"))?;
 
     transform(res.parse()?)
 }
