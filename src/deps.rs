@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::{path, thread};
 use toml::Value as Toml;
+use ureq::Proxy;
 use url::Url;
 
 #[derive(Clone)]
@@ -143,10 +144,18 @@ fn configure_agent() -> Result<ureq::Agent> {
         .unwrap_or_else(|_| String::from("30"))
         .parse()?;
 
-    Ok(ureq::builder()
+    let mut agent_builder = ureq::builder()
         .timeout_connect(std::time::Duration::from_secs(conn_timeout))
-        .timeout(std::time::Duration::from_secs(timeout))
-        .build())
+        .timeout(std::time::Duration::from_secs(timeout));
+
+    let proxy_url = std::env::var("PROXY");
+    if let Ok(proxy_url) = proxy_url {
+        let proxy = Proxy::new(&proxy_url)
+            .with_context(|| format!("unable to parse PROXY url {proxy_url}"))?;
+        agent_builder = agent_builder.proxy(proxy);
+    }
+
+    Ok(agent_builder.build())
 }
 
 fn transform(toml: Toml) -> Result<Vec<Dependency>> {
