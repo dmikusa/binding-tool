@@ -7,7 +7,7 @@ The initial implementation focuses on creating bindings for use locally with `pa
 ## Usage
 
 ```
-binding_tool 0.6.0
+binding_tool
 Daniel Mikusa <dmikusa@vmware.com>
 Generate Kubernetes service bindings for use with Cloud Native Buildpacks
 
@@ -27,6 +27,16 @@ SUBCOMMANDS:
     dependency-mapping    Convenience for adding `dependency-mapping` bindings
     help                  Print this message or the help of the given subcommand(s)
 ```
+
+## Proxy Support
+
+The binding-tool uses ureq to make HTTP/HTTPS requests like when it downloads dependencies. The ureq library has proxy support for the http, socks4, socks4a, and socks5 protocols. The CLI reads in proxy configuration from the `PROXY` environment variable. The variable name is intentionally different from the standard `HTTP_PROXY`/`HTTPS_PROXY` environment variables because the ureq format is different. The ureq library supports configuration in the format `<protocol>://<user>:<password>@<host>:port`.
+
+To enable proxy support simply set `PROXY=http://localhost:8080` and insert your proxy settings.
+
+## CA Certificates
+
+The binding-tool uses rustls and rustls-native-certs, which will read CA certificates from the local system store. The CLI reads TLS certificates from the local system store, so if you need to add or trust additional certificates you can just add them to your OS and the tool will pick them up automatically. If you do not or cannot add the certificate to the system store, you may set `SSL_CERT_FILE` and point it to a PEM encoded CA certs file which will be trusted instead.
 
 ## Examples
 
