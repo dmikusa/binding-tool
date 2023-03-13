@@ -141,23 +141,14 @@ jobs:
           path: ./version/version
   build:
     needs:
-      - version
+#      - version -- relies on original repo tags
       - lints
-      - test
+#      - test -- super long to run, skip for now
       - check
-    runs-on: '${{ matrix.os }}'
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            suffix: ''
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            suffix: ''
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            suffix: .exe
+        target: [ x86_64-unknown-linux-gnu, x86_64-pc-windows-msvc]
     steps:
       - uses: actions/checkout@master
         with:
@@ -165,11 +156,14 @@ jobs:
       - id: get_repository_name
         run: echo ::set-output name=REPOSITORY_NAME::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//")
         shell: bash
-      - uses: actions/download-artifact@master
-        with:
-          name: version
+#      - uses: actions/download-artifact@master
+#        with:
+#          name: version
       - id: get_version
-        run: 'echo ::set-output "name=VERSION::$(cat ./version)"'
+        run: 'echo ::set-output "name=VERSION::v1.17.1"'
+        shell: bash
+      - id: install-musl-tools
+        run: sudo apt -y install musl-tools
         shell: bash
       - uses: actions/cache@v1
         with:
@@ -188,6 +182,7 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+          target: ${{ matrix.target }}
       - uses: actions-rs/cargo@v1
         with:
           command: install
@@ -204,8 +199,9 @@ jobs:
           VERSION: '${{ steps.get_version.outputs.VERSION }}'
           REPOSITORY_NAME: '${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}'
         with:
+          use-cross: true
           command: build
-          args: '--release'
+          args: '--release --target ${{ matrix.target }}'
       - uses: actions/upload-artifact@master
         with:
           name: bt-${{ matrix.target }}

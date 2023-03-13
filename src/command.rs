@@ -342,7 +342,7 @@ impl<'a> CommandHandler<'a> for AddCommandHandler {
 
         // process bindings
         let btp = BindingProcessor::new(&bindings_home, binding_type, binding_name, confirmer);
-        btp.add_bindings(binding_key_vals.unwrap().into_iter().map(|s| s.as_str()))
+        btp.add_bindings(binding_key_vals.unwrap().map(|s| s.as_str()))
     }
 }
 
