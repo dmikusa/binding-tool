@@ -295,7 +295,7 @@ enum Command {
     Init(InitCommandHandler<Stdout>),
 }
 
-impl str::FromStr for Command {
+impl FromStr for Command {
     type Err = anyhow::Error;
 
     fn from_str(input: &str) -> Result<Command, Self::Err> {
@@ -342,7 +342,7 @@ impl<'a> CommandHandler<'a> for AddCommandHandler {
 
         // process bindings
         let btp = BindingProcessor::new(&bindings_home, binding_type, binding_name, confirmer);
-        btp.add_bindings(binding_key_vals.unwrap().into_iter().map(|s| s.as_str()))
+        btp.add_bindings(binding_key_vals.unwrap().map(|s| s.as_str()))
     }
 }
 
@@ -587,7 +587,7 @@ mod tests {
     #[serial(requires_cwd)]
     fn given_no_bindings_root_set_it_returns_current_working_directory() {
         temp_env::with_var_unset("SERVICE_BINDING_ROOT", || {
-            let root = super::service_binding_root();
+            let root = service_binding_root();
             assert!(root.starts_with(env::current_dir().unwrap().to_str().unwrap()));
         });
     }
@@ -595,7 +595,7 @@ mod tests {
     #[test]
     fn given_bindings_root_set_it_returns_bindings_root_dir() {
         temp_env::with_var("SERVICE_BINDING_ROOT", Some("/bindings"), || {
-            let root = super::service_binding_root();
+            let root = service_binding_root();
             assert!(root.starts_with("/bindings"));
         });
     }
