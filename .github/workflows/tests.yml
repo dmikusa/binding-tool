@@ -23,16 +23,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v1
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
         with:
           path: ~/.cargo/registry
           key: '${{ runner.os }}-cargo-registry-${{ hashFiles(''**/Cargo.lock'') }}'
-      - uses: actions/cache@v1
+      - uses: actions/cache@v3
         with:
           path: ~/.cargo/git
           key: '${{ runner.os }}-cargo-index-${{ hashFiles(''**/Cargo.lock'') }}'
-      - uses: actions/cache@v1
+      - uses: actions/cache@v3
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
@@ -48,16 +48,16 @@ jobs:
   lints:
       runs-on: ubuntu-latest
       steps:
-        - uses: actions/checkout@v2
-        - uses: actions/cache@v1
+        - uses: actions/checkout@v3
+        - uses: actions/cache@v3
           with:
             path: ~/.cargo/registry
             key: '${{ runner.os }}-cargo-registry-${{ hashFiles(''**/Cargo.lock'') }}'
-        - uses: actions/cache@v1
+        - uses: actions/cache@v3
           with:
             path: ~/.cargo/git
             key: '${{ runner.os }}-cargo-index-${{ hashFiles(''**/Cargo.lock'') }}'
-        - uses: actions/cache@v1
+        - uses: actions/cache@v3
           with:
             path: target
             key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
@@ -85,16 +85,16 @@ jobs:
           - os: ubuntu-latest
           - os: windows-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v1
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
         with:
           path: ~/.cargo/registry
           key: '${{ runner.os }}-cargo-registry-${{ hashFiles(''**/Cargo.lock'') }}'
-      - uses: actions/cache@v1
+      - uses: actions/cache@v3
         with:
           path: ~/.cargo/git
           key: '${{ runner.os }}-cargo-index-${{ hashFiles(''**/Cargo.lock'') }}'
-      - uses: actions/cache@v1
+      - uses: actions/cache@v3
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
