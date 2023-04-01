@@ -4,6 +4,25 @@ A tool to make generating and consuming [Kubernetes service bindings](https://gi
 
 The initial implementation focuses on creating bindings for use locally with `pack` and Docker (or similar tools).
 
+## Installation
+
+### From Release Binaries
+
+Most users will want to download the release binaries.
+
+1. Download a release from the [releases page](https://github.com/dmikusa/binding-tool/releases).
+2. Extract the files. Included will be a binary, the LICENSE and the README.
+3. On MacOS, run `xattr -dr com.apple.quarantine ./bt && xattr -dr com.apple.metadata:kMDItemWhereFroms ./bt` from the folder where you extracted the files. This removes MacOS warnings about downloaded files.
+4. **Optional** Move the extracted `bt` binary to your PATH.
+
+### From Source
+
+If you need to compile from source or are making customizations to the tool you can build from source.
+
+1. [Install Rust](https://www.rust-lang.org/learn/get-started).
+2. Run `cargo build --release`.
+4. **Optional** Move the compiled binary `target/release/bt` to your PATH.
+
 ## Usage
 
 ```
