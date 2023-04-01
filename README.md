@@ -57,6 +57,17 @@ To enable proxy support simply set `PROXY=http://localhost:8080` and insert your
 
 The binding-tool uses rustls and rustls-native-certs, which will read CA certificates from the local system store. The CLI reads TLS certificates from the local system store, so if you need to add or trust additional certificates you can just add them to your OS and the tool will pick them up automatically. If you do not or cannot add the certificate to the system store, you may set `SSL_CERT_FILE` and point it to a PEM encoded CA certs file which will be trusted instead.
 
+## Client Download Settings
+
+You may configure the following client download settings. These impact how the client operates when downloading dependencies.
+
+| Env Variable        | Default   | Description                                                                                                                                                |
+| ------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BT_MAX_SIMULTANEOUS | 5         | The maximum number of simultaneous downloads                                                                                                               |
+| BT_CONN_TIMEOUT     | 5         | Timeout for the socket connection to be successful                                                                                                         |
+| BT_READ_TIMEOUT     | 5         | Timeout for the individual reads of the socket                                                                                                             |
+| BT_REQ_TIMEOUT      | <not-set> | Timeout for the overall request, including DNS resolution, connection time, redirects, and reading the response body. If set, overrides `BT_READ_TIMEOUT`. |
+
 ## Examples
 
 ### Creating Dependency Mapping Bindings
