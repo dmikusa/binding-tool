@@ -82,7 +82,13 @@ pub(super) fn parse_buildpack_toml_from_disk(path: &path::Path) -> Result<Vec<De
 }
 
 pub(super) fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<Dependency>> {
-    let uri = format!("https://raw.githubusercontent.com/{buildpack}/main/buildpack.toml");
+    let parts = buildpack.splitn(2, '@').collect::<Vec<&str>>();
+
+    let uri = match parts.as_slice() {
+        [b] => Ok(format!("https://raw.githubusercontent.com/{b}/main/buildpack.toml")),
+        [b, v] => Ok(format!("https://raw.githubusercontent.com/{b}/{v}/buildpack.toml")),
+        [..] => Err(anyhow!("parse of [{buildpack}], should have format `buildpack/id@version`, `@version` is optional")),
+    }?;
 
     let agent = configure_agent()?;
     let res = agent

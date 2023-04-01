@@ -283,7 +283,8 @@ impl Parser {
                             .value_name("buildpack")
                             .action(ArgAction::Append)
                             .conflicts_with("TOML")
-                            .help("buildpack ID from which dependencies will be loaded"),
+                            .help("buildpack ID and optional version from which dependencies will be loaded\n    \
+                                Example: `buildpack/id@version` or `buildpack/id`"),
                     )
                     .about("Convenience for adding `dependency-mapping` bindings")
                     .after_help(include_str!("help/additional_help_binding.txt")),
