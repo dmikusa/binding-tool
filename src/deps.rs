@@ -18,7 +18,8 @@ use std::fs::File;
 use std::io::{self, prelude::*};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::{path, thread};
+use std::time::Duration;
+use std::{env, path, thread};
 use toml::Value as Toml;
 use ureq::Proxy;
 use url::Url;
@@ -105,7 +106,7 @@ pub(super) fn download_dependencies(
     deps: Vec<Dependency>,
     binding_path: path::PathBuf,
 ) -> Result<()> {
-    let max_simult: usize = std::env::var("BT_MAX_SIMULTANEOUS")
+    let max_simult: usize = env::var("BT_MAX_SIMULTANEOUS")
         .unwrap_or_else(|_| String::from("5"))
         .parse()?;
 
@@ -142,19 +143,23 @@ pub(super) fn download_dependencies(
 }
 
 fn configure_agent() -> Result<ureq::Agent> {
-    let conn_timeout: u64 = std::env::var("BT_CONN_TIMEOUT")
+    let conn_timeout: u64 = env::var("BT_CONN_TIMEOUT")
         .unwrap_or_else(|_| String::from("5"))
         .parse()?;
 
-    let timeout: u64 = std::env::var("BT_REQ_TIMEOUT")
-        .unwrap_or_else(|_| String::from("30"))
+    let read_timeout: u64 = env::var("BT_READ_TIMEOUT")
+        .unwrap_or_else(|_| String::from("5"))
         .parse()?;
 
     let mut agent_builder = ureq::builder()
-        .timeout_connect(std::time::Duration::from_secs(conn_timeout))
-        .timeout(std::time::Duration::from_secs(timeout));
+        .timeout_connect(Duration::from_secs(conn_timeout))
+        .timeout_read(Duration::from_secs(read_timeout));
 
-    let proxy_url = std::env::var("PROXY");
+    if let Ok(req_timeout) = env::var("BT_REQ_TIMEOUT") {
+        agent_builder = agent_builder.timeout(Duration::from_secs(req_timeout.parse::<u64>()?));
+    }
+
+    let proxy_url = env::var("PROXY");
     if let Ok(proxy_url) = proxy_url {
         let proxy = Proxy::new(&proxy_url)
             .with_context(|| format!("unable to parse PROXY url {proxy_url}"))?;
