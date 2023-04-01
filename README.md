@@ -44,7 +44,8 @@ The binding-tool uses rustls and rustls-native-certs, which will read CA certifi
 
 1. Create dependency mappings and download dependencies for all dependencies in a buildpack: `bt dependency-mapping -b paketo-buildpacks/bellsoft-liberica`
 2. Run again with a second buildpack. It'll update the dependency mappings and download dependencies. You can even use `dm` for short. `bt dm -b paketo-buildpacks/apache-tomcat`.
-3. If you have the `buildpack.toml` file locally, you can `bt dm -t path/to/buildpack.toml` and it will download all dependencies from that file and create dependency mappings for them.
+3. You may download from a specific version of a buildpack using `bt dm -b paketo-buildpacks/syft@v1.24.1`.
+4. If you have the `buildpack.toml` file locally, you can `bt dm -t path/to/buildpack.toml` and it will download all dependencies from that file and create dependency mappings for them.
 
 ### Creating CA Certificate Bindings
 
