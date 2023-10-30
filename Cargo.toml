@@ -56,7 +56,7 @@ lto = "thin"
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.0.5"
 # The preferred Rust toolchain to use in CI (rustup toolchain syntax)
-rust-toolchain-version = "1.68.0"
+rust-toolchain-version = "1.73.0"
 # CI backends to support (see 'cargo dist generate-ci')
 ci = ["github"]
 # Target platforms to build apps for (Rust target-triple syntax)
