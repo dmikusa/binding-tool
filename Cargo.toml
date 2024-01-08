@@ -44,7 +44,7 @@ features = ["tls", "native-certs", "cookies", "gzip", "brotli", "socks-proxy"]
 [dev-dependencies]
 tempfile = "3"
 temp-env = "0.3"
-serial_test = "2.0"
+serial_test = "3.0"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
