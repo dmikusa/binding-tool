@@ -193,12 +193,28 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
             .as_table()
             .with_context(|| "dependency should be a table")?;
 
-        let sha256 = table
+        let is_sha256_present = table.contains_key("sha256");
+        let mut sha256 = String::from("");
+        if is_sha256_present == true {
+            sha256 = table
             .get("sha256")
             .with_context(|| "sha256 field is required")?
             .as_str()
             .with_context(|| "sha256 should be a string")?
             .to_owned();
+        } else {
+            let checksum = table
+            .get("checksum")
+            .with_context(|| "checksum field is required")?
+            .as_str()
+            .with_context(|| "checksum should be a string")?
+            .to_owned();
+
+            if let Some((_first, last)) = checksum.split_once(":"){
+                sha256 = last.to_string();
+            }
+        }
+
         let uri = table
             .get("uri")
             .with_context(|| "uri field is required")?
