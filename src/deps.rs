@@ -197,7 +197,7 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
         let is_checksum_present = table.contains_key("checksum");
         let mut sha256 = String::from("");
 
-        if is_sha256_present == true && is_checksum_present == false {
+        if is_sha256_present && !is_checksum_present {
             sha256 = table
                 .get("sha256")
                 .with_context(|| "sha256 field is required")?
@@ -206,7 +206,7 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
                 .to_owned();
         }
 
-        if is_sha256_present == false && is_checksum_present == true {
+        if !is_sha256_present && is_checksum_present {
             let checksum = table
                 .get("checksum")
                 .with_context(|| "checksum field is required")?
@@ -214,13 +214,13 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
                 .with_context(|| "checksum should be a string")?
                 .to_owned();
 
-            sha256 = match checksum.split_once(":") {
+            sha256 = match checksum.split_once(':') {
                 Some((_first, last)) => last.to_string(),
                 None => checksum,
             }
         }
 
-        if is_sha256_present == false && is_checksum_present == false {
+        if !is_sha256_present && !is_checksum_present {
             panic!("sha256 or checksum field is required");
         }
 
