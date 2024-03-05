@@ -194,25 +194,34 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
             .with_context(|| "dependency should be a table")?;
 
         let is_sha256_present = table.contains_key("sha256");
+        let is_checksum_present = table.contains_key("checksum");
         let mut sha256 = String::from("");
-        if is_sha256_present == true {
-            sha256 = table
-            .get("sha256")
-            .with_context(|| "sha256 field is required")?
-            .as_str()
-            .with_context(|| "sha256 should be a string")?
-            .to_owned();
-        } else {
-            let checksum = table
-            .get("checksum")
-            .with_context(|| "checksum field is required")?
-            .as_str()
-            .with_context(|| "checksum should be a string")?
-            .to_owned();
 
-            if let Some((_first, last)) = checksum.split_once(":"){
-                sha256 = last.to_string();
+        if is_sha256_present == true && is_checksum_present == false {
+            sha256 = table
+                .get("sha256")
+                .with_context(|| "sha256 field is required")?
+                .as_str()
+                .with_context(|| "sha256 should be a string")?
+                .to_owned();
+        }
+
+        if is_sha256_present == false && is_checksum_present == true {
+            let checksum = table
+                .get("checksum")
+                .with_context(|| "checksum field is required")?
+                .as_str()
+                .with_context(|| "checksum should be a string")?
+                .to_owned();
+
+            sha256 = match checksum.split_once(":") {
+                Some((_first, last)) => last.to_string(),
+                None => checksum,
             }
+        }
+
+        if is_sha256_present == false && is_checksum_present == false {
+            panic!("sha256 or checksum field is required");
         }
 
         let uri = table
@@ -311,8 +320,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "sha256 field is required")]
-    fn transform_metadata_dependency_should_have_an_sha256() {
+    #[should_panic(expected = "sha256 or checksum field is required")]
+    fn transform_metadata_dependency_should_have_an_sha256_or_checksum() {
         transform(
             toml::from_str(
                 r#"[[metadata.dependencies]]
