@@ -215,7 +215,13 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
                 .to_owned();
 
             sha256 = match checksum.split_once(':') {
-                Some((_first, last)) => last.to_string(),
+                Some((algorithm, hash)) => {
+                    if algorithm.eq_ignore_ascii_case("sha256") {
+                        hash.to_string()
+                    } else {
+                        panic!("only sha256 algorithm is supported");
+                    }
+                }
                 None => checksum,
             }
         }
@@ -339,6 +345,32 @@ mod tests {
             toml::from_str(
                 r#"[[metadata.dependencies]]
                     sha256 = 1"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "checksum should be a string")]
+    fn transform_metadata_dependency_checksum_should_be_str() {
+        transform(
+            toml::from_str(
+                r#"[[metadata.dependencies]]
+                    checksum = 1"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "only sha256 algorithm is supported")]
+    fn transform_metadata_dependency_checksum_should_use_sha256() {
+        transform(
+            toml::from_str(
+                r#"[[metadata.dependencies]]
+                    checksum = "1:fdfdff""#,
             )
             .unwrap(),
         )
