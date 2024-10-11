@@ -943,7 +943,7 @@ mod tests {
         assert!(res.is_ok(), "init handler should succeed");
         assert_eq!(
             tb.string().unwrap().trim_end(),
-            include_str!("scripts/zsh.sh")
+            include_str!("scripts/zsh.sh").trim_end()
         );
     }
 
