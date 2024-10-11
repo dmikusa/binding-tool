@@ -946,6 +946,7 @@ mod tests {
             include_str!("scripts/zsh.sh")
         );
     }
+
     #[test]
     fn given_a_binding_args_outputs() {
         let tmpdir = tempfile::tempdir().unwrap();
