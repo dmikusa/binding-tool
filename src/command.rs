@@ -541,6 +541,7 @@ where
             match shell {
                 "fish" => include_str!("scripts/fish.sh"),
                 "bash" => include_str!("scripts/bash.sh"),
+                "zsh" => include_str!("scripts/zsh.sh"),
                 _ => bail!("unsupported shell {}", shell),
             }
         )
@@ -926,6 +927,23 @@ mod tests {
         assert_eq!(
             tb.string().unwrap().trim_end(),
             include_str!("scripts/bash.sh"),
+        );
+    }
+
+    #[test]
+    fn given_a_binding_init_outputs_zsh_script() {
+        // check args
+        let args = args::Parser::new().parse_args(vec!["bt", "init", "zsh"]);
+        let cmd = args.subcommand_matches("init").unwrap();
+        let mut tb = TestBuffer::new();
+        let res = InitCommandHandler {
+            output: tb.writer(),
+        }
+        .handle(Some(cmd));
+        assert!(res.is_ok(), "init handler should succeed");
+        assert_eq!(
+            tb.string().unwrap().trim_end(),
+            include_str!("scripts/zsh.sh").trim_end()
         );
     }
 

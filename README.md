@@ -93,7 +93,11 @@ You may configure the following client download settings. These impact how the c
 
 Creating the bindings is only one-half of the fun. The other half is consuming them at build and launch time. The `bt` tool has the `bt init <shell>` command to make this easier.
 
-Add `eval "$(bt init bash)"` to `~/.bashrc` for Bash, or add `eval (bt init fish)` to `~/.config/fish/config.fish` for Fish. Then reload your shell.
+Depending on your shell, do the following and reload your shell afterwards:
+
+- Bash: Add `eval "$(bt init bash)"` to `~/.bashrc`
+- Fish: Add `eval (bt init fish)` to `~/.config/fish/config.fish`
+- Zsh: Add `eval "$(bt init zsh)"` to `~/.config/.zshrc`
 
 This will add two wrapper functions to your shell. They wrap the `docker` and `pack` commands. If a `docker run` or `pack build` are executed, then the script will append the additional arguments required for your bindings to the command. If any other subcommand of `docker` or `pack` are executed, all args are passed through unchanged.
 

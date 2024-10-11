@@ -295,7 +295,7 @@ impl Parser {
                         Arg::new("SHELL")
                             .value_name("shell")
                             .required(true)
-                            .value_parser(["bash", "fish"])
+                            .value_parser(["bash", "fish", "zsh"])
                             .help("type of shell script to generate"))
                     .about(
                         "Generates shell wrappers that make using `pack build` and `docker run` easier",
