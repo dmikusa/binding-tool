@@ -282,7 +282,7 @@ where
     }
 }
 
-trait CommandHandler<'a> {
+trait CommandHandler {
     fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()>;
 }
 
@@ -319,7 +319,7 @@ impl str::FromStr for Command {
 
 struct AddCommandHandler {}
 
-impl<'a> CommandHandler<'a> for AddCommandHandler {
+impl CommandHandler for AddCommandHandler {
     fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()> {
         ensure!(args.is_some(), "missing required args");
         let args = args.unwrap();
@@ -348,7 +348,7 @@ impl<'a> CommandHandler<'a> for AddCommandHandler {
 
 struct DeleteCommandHandler {}
 
-impl<'a> CommandHandler<'a> for DeleteCommandHandler {
+impl CommandHandler for DeleteCommandHandler {
     fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()> {
         ensure!(args.is_some(), "missing required args");
         let args = args.unwrap();
@@ -377,7 +377,7 @@ impl<'a> CommandHandler<'a> for DeleteCommandHandler {
 
 struct CaCertsCommandHandler {}
 
-impl<'a> CommandHandler<'a> for CaCertsCommandHandler {
+impl CommandHandler for CaCertsCommandHandler {
     fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()> {
         ensure!(args.is_some(), "missing required args");
         let args = args.unwrap();
@@ -418,7 +418,7 @@ impl<'a> CommandHandler<'a> for CaCertsCommandHandler {
 
 struct DependencyMappingCommandHandler {}
 
-impl<'a> CommandHandler<'a> for DependencyMappingCommandHandler {
+impl CommandHandler for DependencyMappingCommandHandler {
     fn handle(&mut self, args: Option<&ArgMatches>) -> Result<()> {
         // TODO: add support for id & version filters
         ensure!(args.is_some(), "missing required args");
@@ -479,7 +479,7 @@ struct ArgsCommandHandler<T> {
     output: T,
 }
 
-impl<'a, T> CommandHandler<'a> for ArgsCommandHandler<T>
+impl<T> CommandHandler for ArgsCommandHandler<T>
 where
     T: Write,
 {
@@ -525,7 +525,7 @@ struct InitCommandHandler<T> {
     output: T,
 }
 
-impl<'a, T> CommandHandler<'a> for InitCommandHandler<T>
+impl<T> CommandHandler for InitCommandHandler<T>
 where
     T: Write,
 {
