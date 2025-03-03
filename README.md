@@ -65,7 +65,7 @@ You may configure the following client download settings. These impact how the c
 | ------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | BT_MAX_SIMULTANEOUS | 5         | The maximum number of simultaneous downloads                                                                                                               |
 | BT_CONN_TIMEOUT     | 5         | Timeout for the socket connection to be successful                                                                                                         |
-| BT_READ_TIMEOUT     | 5         | Timeout for the individual reads of the socket                                                                                                             |
+| BT_READ_TIMEOUT     | 5         | Timeout for receiving the response headers, but not the body                                                                                               |
 | BT_REQ_TIMEOUT      | <not-set> | Timeout for the overall request, including DNS resolution, connection time, redirects, and reading the response body. If set, overrides `BT_READ_TIMEOUT`. |
 
 ## Examples

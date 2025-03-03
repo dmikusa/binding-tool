@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{self, prelude::*};
@@ -21,7 +21,8 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 use std::{env, path, thread};
 use toml::Value as Toml;
-use ureq::Proxy;
+use ureq::tls::TlsConfig;
+use ureq::{Agent, Proxy};
 use url::Url;
 
 #[derive(Clone)]
@@ -65,9 +66,10 @@ impl Dependency {
         let dest = binding_path.join("binaries").join(self.filename()?);
         let mut fp = File::create(&dest).with_context(|| format!("cannot open file {dest:?}"))?;
 
-        let mut reader = agent.get(&self.uri).call()?.into_reader();
+        let mut response = agent.get(&self.uri).call()?;
 
-        std::io::copy(&mut reader, &mut fp).with_context(|| "copy failed")?;
+        std::io::copy(&mut response.body_mut().as_reader(), &mut fp)
+            .with_context(|| "copy failed")?;
         Ok(())
     }
 }
@@ -86,9 +88,15 @@ pub(super) fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<D
     let parts = buildpack.splitn(2, '@').collect::<Vec<&str>>();
 
     let uri = match parts.as_slice() {
-        [b] => Ok(format!("https://raw.githubusercontent.com/{b}/main/buildpack.toml")),
-        [b, v] => Ok(format!("https://raw.githubusercontent.com/{b}/{v}/buildpack.toml")),
-        [..] => Err(anyhow!("parse of [{buildpack}], should have format `buildpack/id@version`, `@version` is optional")),
+        [b] => Ok(format!(
+            "https://raw.githubusercontent.com/{b}/main/buildpack.toml"
+        )),
+        [b, v] => Ok(format!(
+            "https://raw.githubusercontent.com/{b}/{v}/buildpack.toml"
+        )),
+        [..] => Err(anyhow!(
+            "parse of [{buildpack}], should have format `buildpack/id@version`, `@version` is optional"
+        )),
     }?;
 
     let agent = configure_agent()?;
@@ -96,7 +104,8 @@ pub(super) fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<D
         .get(&uri)
         .call()
         .with_context(|| format!("failed on url {uri}"))?
-        .into_string()
+        .into_body()
+        .read_to_string()
         .with_context(|| format!("failed on url {uri}"))?;
 
     transform(res.parse()?)
@@ -143,30 +152,36 @@ pub(super) fn download_dependencies(
 }
 
 fn configure_agent() -> Result<ureq::Agent> {
-    let conn_timeout: u64 = env::var("BT_CONN_TIMEOUT")
+    let conn_timeout = env::var("BT_CONN_TIMEOUT")
         .unwrap_or_else(|_| String::from("5"))
         .parse()?;
 
-    let read_timeout: u64 = env::var("BT_READ_TIMEOUT")
+    let read_timeout = env::var("BT_READ_TIMEOUT")
         .unwrap_or_else(|_| String::from("5"))
         .parse()?;
 
-    let mut agent_builder = ureq::builder()
-        .timeout_connect(Duration::from_secs(conn_timeout))
-        .timeout_read(Duration::from_secs(read_timeout));
+    let global_timeout = env::var("BT_REQ_TIMEOUT")
+        .ok()
+        .map(|t| Duration::from_secs(t.parse::<u64>().expect("BT_REQ_TIMEOUT must be a number")));
 
-    if let Ok(req_timeout) = env::var("BT_REQ_TIMEOUT") {
-        agent_builder = agent_builder.timeout(Duration::from_secs(req_timeout.parse::<u64>()?));
-    }
+    let proxy = env::var("PROXY")
+        .ok()
+        .map(|proxy_url| Proxy::new(&proxy_url).expect("PROXY must be a URL"))
+        .or(Proxy::try_from_env());
 
-    let proxy_url = env::var("PROXY");
-    if let Ok(proxy_url) = proxy_url {
-        let proxy = Proxy::new(&proxy_url)
-            .with_context(|| format!("unable to parse PROXY url {proxy_url}"))?;
-        agent_builder = agent_builder.proxy(proxy);
-    }
-
-    Ok(agent_builder.build())
+    Ok(Agent::config_builder()
+        .tls_config(
+            TlsConfig::builder()
+                .provider(ureq::tls::TlsProvider::NativeTls)
+                .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+                .build(),
+        )
+        .timeout_connect(Some(Duration::from_secs(conn_timeout)))
+        .timeout_recv_response(Some(Duration::from_secs(read_timeout)))
+        .timeout_global(global_timeout)
+        .proxy(proxy)
+        .build()
+        .into())
 }
 
 fn transform(toml: Toml) -> Result<Vec<Dependency>> {
@@ -239,7 +254,7 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{transform, Dependency};
+    use super::{Dependency, transform};
 
     #[test]
     fn dependency_filename() {
