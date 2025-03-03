@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::{prelude::*, stdin, Stdout};
+use std::io::{Stdout, prelude::*, stdin};
 use std::str::FromStr;
 use std::{env, fs, path, str};
 
-use anyhow::{anyhow, bail, ensure, Context, Result};
-use clap::parser::ValueSource;
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::ArgMatches;
+use clap::parser::ValueSource;
 
 use crate::{args, deps};
 

@@ -15,7 +15,7 @@
 [package]
 name = "binding_tool"
 version = "1.22.1"
-edition = "2018"
+edition = "2024"
 authors = ["Daniel Mikusa <dan@mikusa.com>"]
 description = "Generate Kubernetes service bindings for use with Cloud Native Buildpacks"
 repository = "https://github.com/dmikusa/binding-tool"
@@ -37,9 +37,9 @@ default-features = false
 features = ["std", "cargo", "help", "usage", "error-context", "wrap_help"]
 
 [dependencies.ureq]
-version = "2.12"
+version = "3.0"
 default-features = false
-features = ["tls", "native-certs", "cookies", "gzip", "brotli", "socks-proxy"]
+features = ["native-tls", "platform-verifier", "cookies", "gzip", "brotli", "socks-proxy"]
 
 [dev-dependencies]
 tempfile = "3"
