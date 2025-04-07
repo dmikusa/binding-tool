@@ -36,8 +36,8 @@ impl Dependency {
         Url::parse(&self.uri)?
             .path_segments()
             .ok_or_else(|| anyhow!("no path segments for {}", &self.uri))
-            .map(|s| {
-                s.last()
+            .map(|mut s| {
+                s.next_back()
                     .map(|s| s.to_owned())
                     .ok_or_else(|| anyhow!("no path for {}", &self.uri))
             })?
