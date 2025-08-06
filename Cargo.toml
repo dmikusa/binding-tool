@@ -14,7 +14,7 @@
 
 [package]
 name = "binding_tool"
-version = "1.22.1"
+version = "1.22.2"
 edition = "2024"
 authors = ["Daniel Mikusa <dan@mikusa.com>"]
 description = "Generate Kubernetes service bindings for use with Cloud Native Buildpacks"
