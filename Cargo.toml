@@ -14,7 +14,7 @@
 
 [package]
 name = "binding_tool"
-version = "1.22.2"
+version = "1.22.3"
 edition = "2024"
 authors = ["Daniel Mikusa <dan@mikusa.com>"]
 description = "Generate Kubernetes service bindings for use with Cloud Native Buildpacks"
@@ -40,6 +40,12 @@ features = ["std", "cargo", "help", "usage", "error-context", "wrap_help"]
 version = "3.0"
 default-features = false
 features = ["native-tls", "platform-verifier", "cookies", "gzip", "brotli", "socks-proxy"]
+
+# vendor openssl as some OS/arch combinations were failing to build
+# https://github.com/sfackler/rust-openssl/issues/2411
+[dependencies.openssl]
+version = "0.10"
+features = ["vendored"]
 
 [dev-dependencies]
 tempfile = "3"
