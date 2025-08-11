@@ -141,10 +141,10 @@ pub(super) fn download_dependencies(
     }
 
     for handle in join_handles {
-        if let Err(err) = handle.join() {
-            if let Ok(msg) = err.downcast::<String>() {
-                return Err(anyhow!("thread panic: {}", msg));
-            }
+        if let Err(err) = handle.join()
+            && let Ok(msg) = err.downcast::<String>()
+        {
+            return Err(anyhow!("thread panic: {}", msg));
         }
     }
 
