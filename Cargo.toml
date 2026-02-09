@@ -37,7 +37,7 @@ default-features = false
 features = ["std", "cargo", "help", "usage", "error-context", "wrap_help"]
 
 [dependencies.ureq]
-version = "3.1"
+version = "3.2"
 default-features = false
 features = ["native-tls", "platform-verifier", "cookies", "gzip", "brotli", "socks-proxy"]
 
