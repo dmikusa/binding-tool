@@ -28,7 +28,8 @@ categories = ["command-line-utilities", "development-tools"]
 anyhow = "1.0"
 toml = "1.1"
 url = "2.5"
-sha2 = "0.10"
+sha2 = "0.11"
+digest-io = "0.1"
 hex = "0.4"
 
 [dependencies.clap]

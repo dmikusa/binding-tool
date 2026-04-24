@@ -13,9 +13,10 @@
 // limitations under the License.
 
 use anyhow::{Context, Result, anyhow};
+use digest_io::IoWrapper;
 use sha2::{Digest, Sha256};
 use std::fs::File;
-use std::io::{self, prelude::*};
+use std::io::prelude::*;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -51,9 +52,9 @@ impl Dependency {
 
         let mut fp = File::open(&dest).with_context(|| format!("cannot open file {dest:?}"))?;
 
-        let mut hasher = Sha256::new();
-        io::copy(&mut fp, &mut hasher)?;
-        let hash = hex::encode(hasher.finalize());
+        let mut hasher = IoWrapper(Sha256::new());
+        std::io::copy(&mut fp, &mut hasher).with_context(|| "hash failed")?;
+        let hash = hex::encode(hasher.0.finalize());
 
         Ok(hash == self.sha256)
     }
