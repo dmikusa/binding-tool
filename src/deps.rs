@@ -15,7 +15,7 @@
 use anyhow::{Context, Result, anyhow};
 use sha2::{Digest, Sha256};
 use std::fs::File;
-use std::io::{self, prelude::*};
+use std::io::prelude::*;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -52,7 +52,14 @@ impl Dependency {
         let mut fp = File::open(&dest).with_context(|| format!("cannot open file {dest:?}"))?;
 
         let mut hasher = Sha256::new();
-        io::copy(&mut fp, &mut hasher)?;
+        let mut buffer = [0u8; 8192];
+        loop {
+            let n = fp.read(&mut buffer)?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buffer[..n]);
+        }
         let hash = hex::encode(hasher.finalize());
 
         Ok(hash == self.sha256)
