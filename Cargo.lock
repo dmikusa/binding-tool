@@ -59,6 +59,7 @@ version = "1.22.3"
 dependencies = [
  "anyhow",
  "clap",
+ "digest-io",
  "hex",
  "openssl",
  "serial_test",
@@ -277,6 +278,15 @@ dependencies = [
  "block-buffer",
  "const-oid",
  "crypto-common",
+]
+
+[[package]]
+name = "digest-io"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2de63d600bc7fab91180bc17385f29b342468dc8ef2af09dceba450a293de3da"
+dependencies = [
+ "digest",
 ]
 
 [[package]]
