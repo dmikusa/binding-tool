@@ -34,14 +34,22 @@ pub(super) struct Dependency {
 
 impl Dependency {
     pub(super) fn filename(&self) -> Result<String> {
-        Url::parse(&self.uri)?
+        let base = Url::parse(&self.uri)?
             .path_segments()
             .ok_or_else(|| anyhow!("no path segments for {}", &self.uri))
             .map(|mut s| {
                 s.next_back()
                     .map(|s| s.to_owned())
                     .ok_or_else(|| anyhow!("no path for {}", &self.uri))
-            })?
+            })??;
+
+        // Prefix the filename with the first 8 hex chars of the sha256 to prevent collisions
+        // when multiple dependency versions share the same URI basename (e.g. GitHub release
+        // assets such as "uv-x86_64-unknown-linux-gnu.tar.gz"). Strip any "algorithm:" prefix
+        // (e.g. "sha256:") that may be present when the checksum field is used.
+        let hash = self.sha256.split_once(':').map_or(self.sha256.as_str(), |(_, h)| h);
+        let prefix = &hash[..8.min(hash.len())];
+        Ok(format!("{prefix}-{base}"))
     }
 
     pub(super) fn checksum_matches(&self, binding_path: &path::Path) -> Result<bool> {
@@ -82,7 +90,7 @@ pub(super) fn parse_buildpack_toml_from_disk(path: &path::Path) -> Result<Vec<De
         .and_then(|mut f| f.read_to_string(&mut input))
         .unwrap();
 
-    transform(input.parse()?)
+    transform(toml::from_str(&input)?)
 }
 
 pub(super) fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<Dependency>> {
@@ -109,7 +117,7 @@ pub(super) fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<D
         .read_to_string()
         .with_context(|| format!("failed on url {uri}"))?;
 
-    transform(res.parse()?)
+    transform(toml::from_str(&res)?)
 }
 
 pub(super) fn download_dependencies(
@@ -260,14 +268,40 @@ mod tests {
     #[test]
     fn dependency_filename() {
         assert_eq!(
-            "filename",
+            "abcdef12-filename",
             Dependency {
-                sha256: "".into(),
+                sha256: "abcdef1234567890".into(),
                 uri: "https://example.com/filename".into(),
             }
             .filename()
             .unwrap()
         );
+    }
+
+    #[test]
+    fn dependency_filename_with_algo_prefix() {
+        assert_eq!(
+            "abcdef12-filename",
+            Dependency {
+                sha256: "sha256:abcdef1234567890".into(),
+                uri: "https://example.com/filename".into(),
+            }
+            .filename()
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn dependency_filename_unique_per_sha256() {
+        let dep1 = Dependency {
+            sha256: "aaa11111bbbbcccc".into(),
+            uri: "https://example.com/uv-x86_64-unknown-linux-gnu.tar.gz".into(),
+        };
+        let dep2 = Dependency {
+            sha256: "bbb22222aaaacccc".into(),
+            uri: "https://example.com/uv-x86_64-unknown-linux-gnu.tar.gz".into(),
+        };
+        assert_ne!(dep1.filename().unwrap(), dep2.filename().unwrap());
     }
 
     #[test]
