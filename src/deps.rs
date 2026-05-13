@@ -30,6 +30,7 @@ use url::Url;
 pub(super) struct Dependency {
     pub(super) sha256: String,
     pub(super) uri: String,
+    pub(super) version: Option<String>,
 }
 
 impl Dependency {
@@ -43,13 +44,20 @@ impl Dependency {
                     .ok_or_else(|| anyhow!("no path for {}", &self.uri))
             })??;
 
-        // Prefix the filename with the first 8 hex chars of the sha256 to prevent collisions
-        // when multiple dependency versions share the same URI basename (e.g. GitHub release
-        // assets such as "uv-x86_64-unknown-linux-gnu.tar.gz"). Strip any "algorithm:" prefix
-        // (e.g. "sha256:") that may be present when the checksum field is used.
-        let hash = self.sha256.split_once(':').map_or(self.sha256.as_str(), |(_, h)| h);
-        let prefix = &hash[..8.min(hash.len())];
-        Ok(format!("{prefix}-{base}"))
+        // If a version is present and not already embedded in the filename
+        // insert "-{version}" before the first extension to disambiguate files whose URI
+        // basenames are identical across dependency versions (e.g. "uv-x86_64-linux.tar.gz").
+        if let Some(version) = &self.version {
+            if !&base.contains(version) {
+                if let Some(dot_pos) = base.find('.') {
+                    return Ok(format!("{}-{}{}", &base[..dot_pos], version, &base[dot_pos..]));
+                } else {
+                    return Ok(format!("{}-{}", base, version));
+                }
+            }
+        }
+
+        Ok(base)
     }
 
     pub(super) fn checksum_matches(&self, binding_path: &path::Path) -> Result<bool> {
@@ -224,6 +232,15 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
             .with_context(|| "uri should be a string")?
             .into();
 
+        let version = table
+            .get("version")
+            .map(|v| {
+                v.as_str()
+                    .with_context(|| "version field should be a string")
+                    .map(|s| s.to_owned())
+            })
+            .transpose()?;
+
         let sha256 = table.get("sha256");
         let checksum = table.get("checksum");
 
@@ -238,6 +255,7 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
                     .with_context(|| "sha256 field should be a string")?
                     .into(),
                 uri,
+                version,
             });
             continue;
         }
@@ -251,6 +269,7 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
                 deps.push(Dependency {
                     sha256: hash.into(),
                     uri,
+                    version,
                 })
             } else {
                 panic!("only sha256 algorithm is supported");
@@ -268,40 +287,15 @@ mod tests {
     #[test]
     fn dependency_filename() {
         assert_eq!(
-            "abcdef12-filename",
+            "filename",
             Dependency {
-                sha256: "abcdef1234567890".into(),
+                sha256: "".into(),
                 uri: "https://example.com/filename".into(),
+                version: None,
             }
             .filename()
             .unwrap()
         );
-    }
-
-    #[test]
-    fn dependency_filename_with_algo_prefix() {
-        assert_eq!(
-            "abcdef12-filename",
-            Dependency {
-                sha256: "sha256:abcdef1234567890".into(),
-                uri: "https://example.com/filename".into(),
-            }
-            .filename()
-            .unwrap()
-        );
-    }
-
-    #[test]
-    fn dependency_filename_unique_per_sha256() {
-        let dep1 = Dependency {
-            sha256: "aaa11111bbbbcccc".into(),
-            uri: "https://example.com/uv-x86_64-unknown-linux-gnu.tar.gz".into(),
-        };
-        let dep2 = Dependency {
-            sha256: "bbb22222aaaacccc".into(),
-            uri: "https://example.com/uv-x86_64-unknown-linux-gnu.tar.gz".into(),
-        };
-        assert_ne!(dep1.filename().unwrap(), dep2.filename().unwrap());
     }
 
     #[test]
@@ -312,6 +306,7 @@ mod tests {
             Dependency {
                 sha256: "".into(),
                 uri: "data:text/plain,HelloWorld".into(),
+                version: None,
             }
             .filename()
             .unwrap()
@@ -466,5 +461,35 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn dependency_filename_version_appended_before_extension() {
+        // Version not present in filename → inserted before the first extension
+        assert_eq!(
+            "uv-x86_64-unknown-linux-gnu-0.11.10.tar.gz",
+            Dependency {
+                sha256: "".into(),
+                uri: "https://github.com/astral-sh/uv/releases/download/0.11.10/uv-x86_64-unknown-linux-gnu.tar.gz".into(),
+                version: Some("0.11.10".into()),
+            }
+            .filename()
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn dependency_filename_version_already_in_name() {
+        // Version already present in filename → returned unchanged
+        assert_eq!(
+            "python-3.12.0-linux-amd64.tar.gz",
+            Dependency {
+                sha256: "".into(),
+                uri: "https://example.com/python-3.12.0-linux-amd64.tar.gz".into(),
+                version: Some("3.12.0".into()),
+            }
+            .filename()
+            .unwrap()
+        );
     }
 }
