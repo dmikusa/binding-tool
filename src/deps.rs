@@ -82,7 +82,7 @@ pub(super) fn parse_buildpack_toml_from_disk(path: &path::Path) -> Result<Vec<De
         .and_then(|mut f| f.read_to_string(&mut input))
         .unwrap();
 
-    transform(input.parse()?)
+    transform(toml::from_str(&input)?)
 }
 
 pub(super) fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<Dependency>> {
