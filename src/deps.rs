@@ -47,13 +47,18 @@ impl Dependency {
         // If a version is present and not already embedded in the filename
         // insert "-{version}" before the first extension to disambiguate files whose URI
         // basenames are identical across dependency versions (e.g. "uv-x86_64-linux.tar.gz").
-        if let Some(version) = &self.version {
-            if !&base.contains(version) {
-                if let Some(dot_pos) = base.find('.') {
-                    return Ok(format!("{}-{}{}", &base[..dot_pos], version, &base[dot_pos..]));
-                } else {
-                    return Ok(format!("{}-{}", base, version));
-                }
+        if let Some(version) = &self.version
+            && !&base.contains(version)
+        {
+            if let Some(dot_pos) = base.find('.') {
+                return Ok(format!(
+                    "{}-{}{}",
+                    &base[..dot_pos],
+                    version,
+                    &base[dot_pos..]
+                ));
+            } else {
+                return Ok(format!("{}-{}", base, version));
             }
         }
 
