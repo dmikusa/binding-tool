@@ -30,18 +30,39 @@ use url::Url;
 pub(super) struct Dependency {
     pub(super) sha256: String,
     pub(super) uri: String,
+    pub(super) version: Option<String>,
 }
 
 impl Dependency {
     pub(super) fn filename(&self) -> Result<String> {
-        Url::parse(&self.uri)?
+        let base = Url::parse(&self.uri)?
             .path_segments()
             .ok_or_else(|| anyhow!("no path segments for {}", &self.uri))
             .map(|mut s| {
                 s.next_back()
                     .map(|s| s.to_owned())
                     .ok_or_else(|| anyhow!("no path for {}", &self.uri))
-            })?
+            })??;
+
+        // If a version is present and not already embedded in the filename
+        // insert "-{version}" before the first extension to disambiguate files whose URI
+        // basenames are identical across dependency versions (e.g. "uv-x86_64-linux.tar.gz").
+        if let Some(version) = &self.version
+            && !&base.contains(version)
+        {
+            if let Some(dot_pos) = base.find('.') {
+                return Ok(format!(
+                    "{}-{}{}",
+                    &base[..dot_pos],
+                    version,
+                    &base[dot_pos..]
+                ));
+            } else {
+                return Ok(format!("{}-{}", base, version));
+            }
+        }
+
+        Ok(base)
     }
 
     pub(super) fn checksum_matches(&self, binding_path: &path::Path) -> Result<bool> {
@@ -82,7 +103,7 @@ pub(super) fn parse_buildpack_toml_from_disk(path: &path::Path) -> Result<Vec<De
         .and_then(|mut f| f.read_to_string(&mut input))
         .unwrap();
 
-    transform(input.parse()?)
+    transform(toml::from_str(&input)?)
 }
 
 pub(super) fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<Dependency>> {
@@ -109,7 +130,7 @@ pub(super) fn parse_buildpack_toml_from_network(buildpack: &str) -> Result<Vec<D
         .read_to_string()
         .with_context(|| format!("failed on url {uri}"))?;
 
-    transform(res.parse()?)
+    transform(toml::from_str(&res)?)
 }
 
 pub(super) fn download_dependencies(
@@ -216,6 +237,15 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
             .with_context(|| "uri should be a string")?
             .into();
 
+        let version = table
+            .get("version")
+            .map(|v| {
+                v.as_str()
+                    .with_context(|| "version field should be a string")
+                    .map(|s| s.to_owned())
+            })
+            .transpose()?;
+
         let sha256 = table.get("sha256");
         let checksum = table.get("checksum");
 
@@ -230,6 +260,7 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
                     .with_context(|| "sha256 field should be a string")?
                     .into(),
                 uri,
+                version,
             });
             continue;
         }
@@ -243,6 +274,7 @@ fn transform(toml: Toml) -> Result<Vec<Dependency>> {
                 deps.push(Dependency {
                     sha256: hash.into(),
                     uri,
+                    version,
                 })
             } else {
                 panic!("only sha256 algorithm is supported");
@@ -264,6 +296,7 @@ mod tests {
             Dependency {
                 sha256: "".into(),
                 uri: "https://example.com/filename".into(),
+                version: None,
             }
             .filename()
             .unwrap()
@@ -278,6 +311,7 @@ mod tests {
             Dependency {
                 sha256: "".into(),
                 uri: "data:text/plain,HelloWorld".into(),
+                version: None,
             }
             .filename()
             .unwrap()
@@ -432,5 +466,35 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn dependency_filename_version_appended_before_extension() {
+        // Version not present in filename → inserted before the first extension
+        assert_eq!(
+            "uv-x86_64-unknown-linux-gnu-0.11.10.tar.gz",
+            Dependency {
+                sha256: "".into(),
+                uri: "https://github.com/astral-sh/uv/releases/download/0.11.10/uv-x86_64-unknown-linux-gnu.tar.gz".into(),
+                version: Some("0.11.10".into()),
+            }
+            .filename()
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn dependency_filename_version_already_in_name() {
+        // Version already present in filename → returned unchanged
+        assert_eq!(
+            "python-3.12.0-linux-amd64.tar.gz",
+            Dependency {
+                sha256: "".into(),
+                uri: "https://example.com/python-3.12.0-linux-amd64.tar.gz".into(),
+                version: Some("3.12.0".into()),
+            }
+            .filename()
+            .unwrap()
+        );
     }
 }
