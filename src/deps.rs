@@ -35,34 +35,35 @@ pub(super) struct Dependency {
 
 impl Dependency {
     pub(super) fn filename(&self) -> Result<String> {
-        let base = Url::parse(&self.uri)?
+        let url = Url::parse(&self.uri)?;
+        let path = url
             .path_segments()
-            .ok_or_else(|| anyhow!("no path segments for {}", &self.uri))
-            .map(|mut s| {
-                s.next_back()
-                    .map(|s| s.to_owned())
-                    .ok_or_else(|| anyhow!("no path for {}", &self.uri))
-            })??;
+            .ok_or_else(|| anyhow!("no path segments for {}", &self.uri))?
+            .next_back()
+            .ok_or_else(|| anyhow!("no path for {}", &self.uri))?;
 
-        // If a version is present and not already embedded in the filename
-        // insert "-{version}" before the first extension to disambiguate files whose URI
-        // basenames are identical across dependency versions (e.g. "uv-x86_64-linux.tar.gz").
-        if let Some(version) = &self.version
-            && !&base.contains(version)
-        {
-            if let Some(dot_pos) = base.find('.') {
-                return Ok(format!(
-                    "{}-{}{}",
-                    &base[..dot_pos],
-                    version,
-                    &base[dot_pos..]
-                ));
-            } else {
-                return Ok(format!("{}-{}", base, version));
-            }
+        if path.is_empty() {
+            return Err(anyhow!("no filename for {}", &self.uri));
         }
 
-        Ok(base)
+        let Some(version) = &self.version else {
+            return Ok(path.to_string());
+        };
+
+        if path.contains(version) {
+            return Ok(path.to_string());
+        }
+
+        if let Some(dot_pos) = path.find('.') {
+            Ok(format!(
+                "{}-{}{}",
+                &path[..dot_pos],
+                version,
+                &path[dot_pos..]
+            ))
+        } else {
+            Ok(format!("{}-{}", path, version))
+        }
     }
 
     pub(super) fn checksum_matches(&self, binding_path: &path::Path) -> Result<bool> {
@@ -496,5 +497,47 @@ mod tests {
             .filename()
             .unwrap()
         );
+    }
+
+    #[test]
+    fn dependency_filename_version_appended_without_extension() {
+        // Version not present and no extension → appended at end
+        assert_eq!(
+            "binary-1.0.0",
+            Dependency {
+                sha256: "".into(),
+                uri: "https://example.com/binary".into(),
+                version: Some("1.0.0".into()),
+            }
+            .filename()
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn dependency_filename_with_path_segments() {
+        // Multiple path segments → uses last segment
+        assert_eq!(
+            "release-2.0.0.tar.gz",
+            Dependency {
+                sha256: "".into(),
+                uri: "https://example.com/some/deep/path/release.tar.gz".into(),
+                version: Some("2.0.0".into()),
+            }
+            .filename()
+            .unwrap()
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "no filename for")]
+    fn dependency_filename_empty_path() {
+        Dependency {
+            sha256: "".into(),
+            uri: "https://example.com/".into(),
+            version: Some("1.0.0".into()),
+        }
+        .filename()
+        .unwrap();
     }
 }
