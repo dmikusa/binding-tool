@@ -23,6 +23,7 @@ readme = "README.md"
 license = "Apache-2.0"
 keywords = ["cli", "cloud-native", "buildpacks", "service-bindings", "docker", "kubernetes"]
 categories = ["command-line-utilities", "development-tools"]
+homepage = "https://github.com/dmikusa/binding-tool"
 
 [dependencies]
 anyhow = "1.0"
