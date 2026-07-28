@@ -38,12 +38,12 @@ impl Dependency {
         let url = Url::parse(&self.uri)?;
         let path = url
             .path_segments()
-            .ok_or_else(|| anyhow!("no path segments for {}", &self.uri))?
+            .ok_or_else(|| anyhow!("no path segments for {}", self.uri))?
             .next_back()
-            .ok_or_else(|| anyhow!("no path for {}", &self.uri))?;
+            .ok_or_else(|| anyhow!("no path for {}", self.uri))?;
 
         if path.is_empty() {
-            return Err(anyhow!("no filename for {}", &self.uri));
+            return Err(anyhow!("no filename for {}", self.uri));
         }
 
         let Some(version) = &self.version else {
