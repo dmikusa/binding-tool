@@ -25,7 +25,8 @@
     {
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["digest"],
-      "dependencyDashboardApproval": true
+      "dependencyDashboardApproval": true,
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
     }
   ]
 }
